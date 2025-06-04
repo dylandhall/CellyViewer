@@ -5,8 +5,8 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-import java.util.Properties
-import java.io.FileInputStream
+// Explicit top-level imports for Properties and FileInputStream removed for this test,
+// using fully qualified names below instead.
 
 android {
     namespace = "au.id.dylan.celly_viewer"
@@ -37,8 +37,8 @@ android {
         create("release") {
             val keystorePropertiesFile = rootProject.file("../key.properties")
             if (keystorePropertiesFile.exists()) {
-                val keystoreProperties = java.util.Properties()
-                keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
+                val keystoreProperties = java.util.Properties() // Using fully qualified name
+                keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile)) // Using fully qualified name
                 try {
                     storeFile = rootProject.file("../${keystoreProperties.getProperty("storeFile")}")
                     storePassword = keystoreProperties.getProperty("storePassword")
