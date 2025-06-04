@@ -5,6 +5,9 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+import java.util.Properties
+import java.io.FileInputStream
+
 android {
     namespace = "au.id.dylan.celly_viewer"
     compileSdk = flutter.compileSdkVersion
