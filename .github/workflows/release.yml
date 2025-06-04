@@ -1,0 +1,209 @@
+name: Build and Release CellyViewer
+
+on:
+  push:
+    tags:
+      - 'v*.*.*' # e.g., v1.0.0, v1.2.3
+
+permissions:
+  contents: write # To create releases and upload assets
+
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag_name: ${{ steps.version.outputs.tag_name }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Get version from pubspec.yaml
+        id: version
+        run: |
+          VERSION_STRING=$(grep 'version: ' pubspec.yaml | sed 's/version: //g' | tr -d ' ' | cut -d '+' -f 1)
+          echo "version=${VERSION_STRING}" >> $GITHUB_OUTPUT
+          echo "tag_name=v${VERSION_STRING}" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION_STRING"
+          echo "Generated tag name: v$VERSION_STRING"
+
+  build-windows:
+    needs: get-version # Ensure version is available
+    runs-on: windows-latest
+    outputs:
+      artifact_name: ${{ steps.prepare_artifact.outputs.artifact_name }}
+      # artifact_path: ${{ steps.prepare_artifact.outputs.artifact_path }} # Path is on runner, not directly useful as output here
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Flutter (stable channel)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - name: Flutter Doctor
+        run: flutter doctor -v
+      - name: Build Windows
+        run: flutter build windows --release
+      - name: Prepare Windows Artifact
+        id: prepare_artifact
+        shell: pwsh 
+        run: |
+          $VERSION = "${{ needs.get-version.outputs.version }}"
+          $ARTIFACT_NAME = "CellyViewer-Windows-v$VERSION.zip"
+          $BUILD_OUTPUT_PATH = "build\windows\runner\Release"
+          # Ensure the destination path for the zip is in a location that upload-artifact can access easily
+          $DESTINATION_ZIP_PATH = Join-Path $env:GITHUB_WORKSPACE $ARTIFACT_NAME
+          Compress-Archive -Path "$BUILD_OUTPUT_PATH\*" -DestinationPath $DESTINATION_ZIP_PATH -Force
+          echo "artifact_name=$ARTIFACT_NAME" >> $env:GITHUB_OUTPUT
+          # echo "artifact_path=$DESTINATION_ZIP_PATH" >> $env:GITHUB_OUTPUT # For local runner reference
+          echo "Windows artifact prepared: $DESTINATION_ZIP_PATH"
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-${{ needs.get-version.outputs.version }} # Name of the artifact in GitHub Actions UI
+          path: ${{ steps.prepare_artifact.outputs.artifact_name }} # Path to the file to upload (relative to GITHUB_WORKSPACE)
+
+  build-android:
+    needs: get-version
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.prepare_artifact.outputs.artifact_name }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17' 
+      - name: Set up Flutter (stable channel)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - name: Flutter Doctor
+        run: flutter doctor -v
+      - name: Clean Flutter
+        run: flutter clean
+      - name: Get Flutter dependencies
+        run: flutter pub get
+      - name: Build Android APK
+        run: flutter build apk --release
+      - name: Prepare Android Artifact
+        id: prepare_artifact
+        run: |
+          VERSION="${{ needs.get-version.outputs.version }}"
+          ARTIFACT_NAME="CellyViewer-Android-v$VERSION.apk"
+          # The APK is in build/app/outputs/flutter-apk/app-release.apk
+          # Move it to GITHUB_WORKSPACE for easier upload path handling
+          mv build/app/outputs/flutter-apk/app-release.apk "$GITHUB_WORKSPACE/$ARTIFACT_NAME"
+          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          echo "Android artifact prepared: $GITHUB_WORKSPACE/$ARTIFACT_NAME"
+      - name: Upload Android Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-${{ needs.get-version.outputs.version }}
+          path: ${{ steps.prepare_artifact.outputs.artifact_name }} # Relative to GITHUB_WORKSPACE
+
+  build-macos:
+    needs: get-version
+    runs-on: macos-latest
+    outputs:
+      artifact_name: ${{ steps.prepare_artifact.outputs.artifact_name }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Flutter (stable channel)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - name: Flutter Doctor
+        run: flutter doctor -v
+      - name: Build macOS
+        run: flutter build macos --release
+      - name: Prepare macOS Artifact
+        id: prepare_artifact
+        run: |
+          VERSION="${{ needs.get-version.outputs.version }}"
+          ARTIFACT_NAME="CellyViewer-macOS-v$VERSION.zip"
+          # Zip will be created in GITHUB_WORKSPACE
+          ditto -c -k --sequesterRsrc --keepParent "build/macos/Build/Products/Release/CellyViewer.app" "$GITHUB_WORKSPACE/$ARTIFACT_NAME"
+          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          echo "macOS artifact prepared: $GITHUB_WORKSPACE/$ARTIFACT_NAME"
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build-${{ needs.get-version.outputs.version }}
+          path: ${{ steps.prepare_artifact.outputs.artifact_name }} # Relative to GITHUB_WORKSPACE
+
+  create-release:
+    needs: [get-version, build-windows, build-android, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build-${{ needs.get-version.outputs.version }}
+          path: ./artifacts/windows/ # Download to this subfolder
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-build-${{ needs.get-version.outputs.version }}
+          path: ./artifacts/android/
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-build-${{ needs.get-version.outputs.version }}
+          path: ./artifacts/macos/
+
+      - name: Display structure of downloaded files
+        run: ls -R ./artifacts
+
+      - name: Create or Update GitHub Release and Upload Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.get-version.outputs.tag_name }}
+          RELEASE_VERSION: ${{ needs.get-version.outputs.version }}
+          # Get artifact names from the build jobs' outputs
+          WINDOWS_ARTIFACT_NAME: ${{ needs.build-windows.outputs.artifact_name }}
+          ANDROID_ARTIFACT_NAME: ${{ needs.build-android.outputs.artifact_name }}
+          MACOS_ARTIFACT_NAME: ${{ needs.build-macos.outputs.artifact_name }}
+        run: |
+          echo "Using tag: $TAG_NAME"
+          echo "Using version: $RELEASE_VERSION"
+
+          # Construct asset paths based on download structure and output names
+          WINDOWS_ARTIFACT_PATH="./artifacts/windows/$WINDOWS_ARTIFACT_NAME"
+          ANDROID_ARTIFACT_PATH="./artifacts/android/$ANDROID_ARTIFACT_NAME"
+          MACOS_ARTIFACT_PATH="./artifacts/macos/$MACOS_ARTIFACT_NAME"
+          
+          ASSET_FILES=()
+          echo "Checking for Windows asset: $WINDOWS_ARTIFACT_NAME at $WINDOWS_ARTIFACT_PATH"
+          [ -f "$WINDOWS_ARTIFACT_PATH" ] && ASSET_FILES+=("$WINDOWS_ARTIFACT_PATH") && echo "Found Windows asset."
+          
+          echo "Checking for Android asset: $ANDROID_ARTIFACT_NAME at $ANDROID_ARTIFACT_PATH"
+          [ -f "$ANDROID_ARTIFACT_PATH" ] && ASSET_FILES+=("$ANDROID_ARTIFACT_PATH") && echo "Found Android asset."
+
+          echo "Checking for macOS asset: $MACOS_ARTIFACT_NAME at $MACOS_ARTIFACT_PATH"
+          [ -f "$MACOS_ARTIFACT_PATH" ] && ASSET_FILES+=("$MACOS_ARTIFACT_PATH") && echo "Found macOS asset."
+          
+          if [ ${#ASSET_FILES[@]} -eq 0 ]; then
+            echo "No assets found to upload for release $TAG_NAME."
+            # Consider exiting if no assets, or let it proceed if an empty release is okay
+            # exit 1 
+          fi
+
+          # Create release if it doesn't exist.
+          # If it exists, gh release view will succeed and the create command won't run.
+          gh release view "$TAG_NAME" || gh release create "$TAG_NAME" \
+            --title "CellyViewer $TAG_NAME" \
+            --notes "Release $TAG_NAME of CellyViewer." \
+            --draft=false \
+            --prerelease=false
+          
+          # Upload assets, clobbering if they exist on the release
+          if [ ${#ASSET_FILES[@]} -gt 0 ]; then
+            echo "Uploading assets: ${ASSET_FILES[@]}"
+            gh release upload "$TAG_NAME" "${ASSET_FILES[@]}" --clobber
+            echo "Assets uploaded for $TAG_NAME."
+          else
+            echo "Skipping asset upload for $TAG_NAME as no files were found/prepared."
+          fi
