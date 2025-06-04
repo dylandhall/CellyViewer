@@ -2,8 +2,8 @@ name: Build and Release CellyViewer
 
 on:
   push:
-    tags:
-      - 'v*.*.*' # e.g., v1.0.0, v1.2.3
+    branches:
+      - master # Trigger on push to master branch
 
 permissions:
   contents: write # To create releases and upload assets
@@ -85,14 +85,35 @@ jobs:
         run: flutter clean
       - name: Get Flutter dependencies
         run: flutter pub get
-      - name: Build Android APK
+
+      - name: Decode Keystore and Setup Signing
+        id: decode_keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_PROPERTIES_PATH: android/key.properties
+        run: |
+          echo "Decoding keystore..."
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/release.jks
+          echo "Keystore decoded to android/release.jks"
+
+          echo "Creating key.properties file..."
+          echo "storeFile=release.jks" > $KEY_PROPERTIES_PATH
+          echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> $KEY_PROPERTIES_PATH
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> $KEY_PROPERTIES_PATH
+          echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> $KEY_PROPERTIES_PATH
+          echo "key.properties created."
+          
+      - name: Build Android APK (Signed)
         run: flutter build apk --release
+        # For AppBundle: flutter build appbundle --release
+        # Ensure your android/app/build.gradle is configured to use key.properties for release signing
+        
       - name: Prepare Android Artifact
         id: prepare_artifact
         run: |
           VERSION="${{ needs.get-version.outputs.version }}"
           ARTIFACT_NAME="CellyViewer-Android-v$VERSION.apk"
-          # The APK is in build/app/outputs/flutter-apk/app-release.apk
+          # The signed APK is in build/app/outputs/flutter-apk/app-release.apk
           # Move it to GITHUB_WORKSPACE for easier upload path handling
           mv build/app/outputs/flutter-apk/app-release.apk "$GITHUB_WORKSPACE/$ARTIFACT_NAME"
           echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
