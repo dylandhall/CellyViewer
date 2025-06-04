@@ -155,8 +155,35 @@ jobs:
           name: macos-build-${{ needs.get-version.outputs.version }}
           path: ${{ steps.prepare_artifact.outputs.artifact_name }} # Relative to GITHUB_WORKSPACE
 
+  build-and-deploy-web:
+    needs: get-version # Ensures version is available if needed for any reason, though not strictly used in this job's current form
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter (stable channel)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Flutter web app
+        run: flutter build web --release --base-href "/CellyViewer/"
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/web
+          # publish_branch: gh-pages # Default is gh-pages
+          # user_name: 'github-actions[bot]' # Optional
+          # user_email: 'github-actions[bot]@users.noreply.github.com' # Optional
+
   create-release:
-    needs: [get-version, build-windows, build-android, build-macos]
+    needs: [get-version, build-windows, build-android, build-macos] # Web deployment is separate, does not need to be a dependency for creating the release with binaries
     runs-on: ubuntu-latest
     steps:
       - name: Download Windows artifact
