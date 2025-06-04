@@ -97,7 +97,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         _currentStartingRule = newStartingRule.clamp(0, maxRulesValue -1);
       }
       if (newJumpAmount != null) {
-        _currentJumpAmount = newJumpAmount.clamp(1, 999);
+        _currentJumpAmount = newJumpAmount.clamp(1, 99999);
         _jumpByController.text = _currentJumpAmount.toString(); // Update text field if changed programmatically
       }
       _numberOfVisibleItems = 20; // Reset to a default page size
@@ -120,7 +120,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     final maxRulesValue = 1 << (1 << widget.pow);
 
     bool ruleIsValid = newRuleNumber != null && newRuleNumber >= 0 && newRuleNumber < maxRulesValue;
-    bool jumpIsValid = newJumpAmount != null && newJumpAmount >= 1 && newJumpAmount <= 999;
+    bool jumpIsValid = newJumpAmount != null && newJumpAmount >= 1 && newJumpAmount <= 99999;
 
     // Dismiss keyboards
     _textFieldFocusNode.unfocus();
@@ -224,7 +224,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                   controller: _jumpByController,
                   focusNode: _jumpByFocusNode,
                   keyboardType: TextInputType.number,
-                  maxLength: 3, // Max 3 digits
+                  maxLength: 5, // Max 3 digits
                   decoration: const InputDecoration(
                     hintText: 'By',
                     counterText: "", // Hide the counter
