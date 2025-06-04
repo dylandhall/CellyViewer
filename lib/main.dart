@@ -281,70 +281,74 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Column(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Center(
-                            child: Text(
-                              gen.isSkipped
-                                  ? 'Image $actualRuleIndex - Skipped (too simple)'
-                                  : 'Image $actualRuleIndex',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                    Center( // Center the Row containing Text and IconButton
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min, // Row takes minimum space needed by children
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            gen.isSkipped
+                                ? 'Image $actualRuleIndex - Skipped (too simple)'
+                                : 'Image $actualRuleIndex',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          if (!gen.isSkipped) // Only show copy button if there's an image
+                            Padding( // Add a little padding to the left of the icon
+                              padding: const EdgeInsets.only(left: 8.0),
+                              child: IconButton(
+                                icon: const Icon(Icons.content_copy),
+                                constraints: const BoxConstraints(), // Remove default IconButton padding
+                                padding: EdgeInsets.zero, // Remove default IconButton padding
+                                tooltip: 'Copy Image to Clipboard',
+                                visualDensity: VisualDensity.compact, // Make it more compact
+                                iconSize: 20, // Adjust icon size if needed
+                                onPressed: () async {
+                                  final bytes = gen.image.bytes;
+                                  if (kDebugMode) {
+                                    print('Attempting to copy image for Rule $actualRuleIndex, byte length: ${bytes.length}');
+                                  }
+
+                                  final clipboard = SystemClipboard.instance;
+                                  if (clipboard == null) {
+                                    if (mounted) { // Check if the widget is still in the tree
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Clipboard API not available on this platform.')),
+                                      );
+                                    }
+                                    return;
+                                  }
+
+                                  final item = DataWriterItem();
+                                  // Add PNG representation using the Formats class.
+                                  // Formats.png is a pre-defined DataFormat<Uint8List>.
+                                  // Calling it with the bytes will produce the EncodedData.
+                                  item.add(Formats.png(bytes));
+                                  
+                                  // Example of adding a text fallback:
+                                  // item.add(Formats.plainText('Cellular Automaton Image - Rule $actualRuleIndex'));
+
+                                  try {
+                                    await clipboard.write([item]);
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Image for Rule $actualRuleIndex copied!')),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (kDebugMode) {
+                                      print('Error copying to clipboard: $e');
+                                    }
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Failed to copy image: $e')),
+                                      );
+                                    }
+                                  }
+                                },
+                              ),
                             ),
-                          ),
-                        ),
-                        if (!gen.isSkipped) // Only show copy button if there's an image
-                          IconButton(
-                            icon: const Icon(Icons.content_copy),
-                            tooltip: 'Copy Image to Clipboard',
-                            onPressed: () async {
-                              final bytes = gen.image.bytes;
-                              if (kDebugMode) {
-                                print('Attempting to copy image for Rule $actualRuleIndex, byte length: ${bytes.length}');
-                              }
-
-                              final clipboard = SystemClipboard.instance;
-                              if (clipboard == null) {
-                                if (mounted) { // Check if the widget is still in the tree
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Clipboard API not available on this platform.')),
-                                  );
-                                }
-                                return;
-                              }
-
-                              final item = DataWriterItem();
-                              // Add PNG representation using the Formats class.
-                              // Formats.png is a pre-defined DataFormat<Uint8List>.
-                              // Calling it with the bytes will produce the EncodedData.
-                              item.add(Formats.png(bytes));
-                              
-                              // Example of adding a text fallback:
-                              // item.add(Formats.plainText('Cellular Automaton Image - Rule $actualRuleIndex'));
-
-                              try {
-                                await clipboard.write([item]);
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Image for Rule $actualRuleIndex copied!')),
-                                  );
-                                }
-                              } catch (e) {
-                                if (kDebugMode) {
-                                  print('Error copying to clipboard: $e');
-                                }
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Failed to copy image: $e')),
-                                  );
-                                }
-                              }
-                            },
-                          ),
-                        if (gen.isSkipped) // Add a spacer if skipped to keep alignment consistent, or leave empty
-                          const SizedBox(width: 48), // Approx width of IconButton
-                      ],
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 4), 
                     if (!gen.isSkipped)
