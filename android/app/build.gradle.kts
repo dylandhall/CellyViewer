@@ -23,52 +23,23 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "au.id.dylan.celly_viewer"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        versionCode = flutterVersionCode.toInteger()
+        versionName = flutterVersionName
     }
-
     signingConfigs {
-        create("release") {
-            val keystorePropertiesFile = rootProject.file("../key.properties")
-            if (keystorePropertiesFile.exists()) {
-                val keystoreProperties = java.util.Properties() // Using fully qualified name
-                keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile)) // Using fully qualified name
-                try {
-                    storeFile = rootProject.file("../${keystoreProperties.getProperty("storeFile")}")
-                    storePassword = keystoreProperties.getProperty("storePassword")
-                    keyAlias = keystoreProperties.getProperty("keyAlias")
-                    keyPassword = keystoreProperties.getProperty("keyPassword")
-                } catch (e: Exception) {
-                    throw GradleException("Error reading signing properties from ../key.properties", e)
-                }
-            } else {
-                // For local builds or if key.properties is missing, this will cause an issue
-                // if 'release' signingConfig is strictly required.
-                // The CI workflow MUST create key.properties.
-                // Consider how you want to handle local release builds without key.properties.
-                // One option is to have a fallback or specific instructions for local release.
-                println("Warning: ../key.properties not found. Release build may fail or use debug signing if not configured otherwise.")
-                // To make it use debug if key.properties is not found for local builds,
-                // you might need more complex logic or rely on Android Studio's build variants.
-                // For CI, this 'else' branch should ideally not be hit if secrets are set.
-            }
+        release {
+            keyAlias System.getenv("KEY_ALIAS")
+            keyPassword System.getenv("KEY_PASSWORD")
+            storeFile file(System.getenv("KEY_PROPERTIES_PATH"))
+            storePassword System.getenv("KEY_PASSWORD")
         }
     }
-
     buildTypes {
         release {
-            // Use the 'release' signing config defined above
-            signingConfig = signingConfigs.getByName("release")
-            // TODO: You may want to add other release-specific settings here
-            // e.g., R8/ProGuard settings for code shrinking and obfuscation
-            // isMinifyEnabled = true
-            // proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.release
         }
     }
 }
