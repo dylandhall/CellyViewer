@@ -31,7 +31,6 @@ jobs:
     runs-on: windows-latest
     outputs:
       artifact_name: ${{ steps.prepare_artifact.outputs.artifact_name }}
-      # artifact_path: ${{ steps.prepare_artifact.outputs.artifact_path }} # Path is on runner, not directly useful as output here
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -50,17 +49,15 @@ jobs:
           $VERSION = "${{ needs.get-version.outputs.version }}"
           $ARTIFACT_NAME = "CellyViewer-Windows-v$VERSION.zip"
           $BUILD_OUTPUT_PATH = "build\windows\runner\Release"
-          # Ensure the destination path for the zip is in a location that upload-artifact can access easily
           $DESTINATION_ZIP_PATH = Join-Path $env:GITHUB_WORKSPACE $ARTIFACT_NAME
           Compress-Archive -Path "$BUILD_OUTPUT_PATH\*" -DestinationPath $DESTINATION_ZIP_PATH -Force
           echo "artifact_name=$ARTIFACT_NAME" >> $env:GITHUB_OUTPUT
-          # echo "artifact_path=$DESTINATION_ZIP_PATH" >> $env:GITHUB_OUTPUT # For local runner reference
           echo "Windows artifact prepared: $DESTINATION_ZIP_PATH"
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-build-${{ needs.get-version.outputs.version }} # Name of the artifact in GitHub Actions UI
-          path: ${{ steps.prepare_artifact.outputs.artifact_name }} # Path to the file to upload (relative to GITHUB_WORKSPACE)
+          name: windows-build-${{ needs.get-version.outputs.version }}
+          path: ${{ steps.prepare_artifact.outputs.artifact_name }}
 
   build-android:
     needs: get-version
@@ -86,35 +83,30 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Decode Keystore and Setup Signing
-        id: decode_keystore
+      - name: Decode Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEY_PROPERTIES_PATH: android/key.properties
+          KEYSTORE_PATH_IN_CI: android/release.jks # Define path here
         run: |
           echo "Decoding keystore..."
-          echo "$KEYSTORE_BASE64" | base64 --decode > android/release.jks
-          echo "Keystore decoded to android/release.jks"
-
-          echo "Creating key.properties file..."
-          echo "storeFile=release.jks" > $KEY_PROPERTIES_PATH
-          echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> $KEY_PROPERTIES_PATH
-          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> $KEY_PROPERTIES_PATH
-          echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> $KEY_PROPERTIES_PATH
-          echo "key.properties created."
+          mkdir -p $(dirname "$KEYSTORE_PATH_IN_CI") # Ensure directory exists
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH_IN_CI"
+          echo "Keystore decoded to $KEYSTORE_PATH_IN_CI"
           
       - name: Build Android APK (Signed)
+        env:
+          # Pass all necessary values as environment variables for Gradle
+          ANDROID_KEYSTORE_PATH_FROM_CI: android/release.jks # Path to the decoded keystore
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: flutter build apk --release
-        # For AppBundle: flutter build appbundle --release
-        # Ensure your android/app/build.gradle is configured to use key.properties for release signing
         
       - name: Prepare Android Artifact
         id: prepare_artifact
         run: |
           VERSION="${{ needs.get-version.outputs.version }}"
           ARTIFACT_NAME="CellyViewer-Android-v$VERSION.apk"
-          # The signed APK is in build/app/outputs/flutter-apk/app-release.apk
-          # Move it to GITHUB_WORKSPACE for easier upload path handling
           mv build/app/outputs/flutter-apk/app-release.apk "$GITHUB_WORKSPACE/$ARTIFACT_NAME"
           echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
           echo "Android artifact prepared: $GITHUB_WORKSPACE/$ARTIFACT_NAME"
@@ -122,7 +114,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-build-${{ needs.get-version.outputs.version }}
-          path: ${{ steps.prepare_artifact.outputs.artifact_name }} # Relative to GITHUB_WORKSPACE
+          path: ${{ steps.prepare_artifact.outputs.artifact_name }}
 
   build-macos:
     needs: get-version
@@ -145,7 +137,6 @@ jobs:
         run: |
           VERSION="${{ needs.get-version.outputs.version }}"
           ARTIFACT_NAME="CellyViewer-macOS-v$VERSION.zip"
-          # Zip will be created in GITHUB_WORKSPACE
           ditto -c -k --sequesterRsrc --keepParent "build/macos/Build/Products/Release/CellyViewer.app" "$GITHUB_WORKSPACE/$ARTIFACT_NAME"
           echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
           echo "macOS artifact prepared: $GITHUB_WORKSPACE/$ARTIFACT_NAME"
@@ -153,44 +144,37 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-build-${{ needs.get-version.outputs.version }}
-          path: ${{ steps.prepare_artifact.outputs.artifact_name }} # Relative to GITHUB_WORKSPACE
+          path: ${{ steps.prepare_artifact.outputs.artifact_name }}
 
   build-and-deploy-web:
-    needs: get-version # Ensures version is available if needed for any reason, though not strictly used in this job's current form
+    needs: get-version 
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up Flutter (stable channel)
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-
       - name: Install dependencies
         run: flutter pub get
-
       - name: Build Flutter web app
         run: flutter build web --release --base-href "/CellyViewer/"
-
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./build/web
-          # publish_branch: gh-pages # Default is gh-pages
-          # user_name: 'github-actions[bot]' # Optional
-          # user_email: 'github-actions[bot]@users.noreply.github.com' # Optional
 
   create-release:
-    needs: [get-version, build-windows, build-android, build-macos] # Web deployment is separate, does not need to be a dependency for creating the release with binaries
+    needs: [get-version, build-windows, build-android, build-macos] 
     runs-on: ubuntu-latest
     steps:
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
           name: windows-build-${{ needs.get-version.outputs.version }}
-          path: ./artifacts/windows/ # Download to this subfolder
+          path: ./artifacts/windows/ 
       - name: Download Android artifact
         uses: actions/download-artifact@v4
         with:
@@ -210,7 +194,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ needs.get-version.outputs.tag_name }}
           RELEASE_VERSION: ${{ needs.get-version.outputs.version }}
-          # Get artifact names from the build jobs' outputs
           WINDOWS_ARTIFACT_NAME: ${{ needs.build-windows.outputs.artifact_name }}
           ANDROID_ARTIFACT_NAME: ${{ needs.build-android.outputs.artifact_name }}
           MACOS_ARTIFACT_NAME: ${{ needs.build-macos.outputs.artifact_name }}
@@ -218,7 +201,6 @@ jobs:
           echo "Using tag: $TAG_NAME"
           echo "Using version: $RELEASE_VERSION"
 
-          # Construct asset paths based on download structure and output names
           WINDOWS_ARTIFACT_PATH="./artifacts/windows/$WINDOWS_ARTIFACT_NAME"
           ANDROID_ARTIFACT_PATH="./artifacts/android/$ANDROID_ARTIFACT_NAME"
           MACOS_ARTIFACT_PATH="./artifacts/macos/$MACOS_ARTIFACT_NAME"
@@ -235,19 +217,14 @@ jobs:
           
           if [ ${#ASSET_FILES[@]} -eq 0 ]; then
             echo "No assets found to upload for release $TAG_NAME."
-            # Consider exiting if no assets, or let it proceed if an empty release is okay
-            # exit 1 
           fi
 
-          # Create release if it doesn't exist.
-          # If it exists, gh release view will succeed and the create command won't run.
           gh release view "$TAG_NAME" || gh release create "$TAG_NAME" \
             --title "CellyViewer $TAG_NAME" \
             --notes "Release $TAG_NAME of CellyViewer." \
             --draft=false \
             --prerelease=false
           
-          # Upload assets, clobbering if they exist on the release
           if [ ${#ASSET_FILES[@]} -gt 0 ]; then
             echo "Uploading assets: ${ASSET_FILES[@]}"
             gh release upload "$TAG_NAME" "${ASSET_FILES[@]}" --clobber

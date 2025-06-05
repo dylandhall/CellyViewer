@@ -5,8 +5,8 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Explicit top-level imports for Properties and FileInputStream removed for this test,
-// using fully qualified names below instead.
+// Imports for Properties and FileInputStream are not strictly needed if using System.getenv() directly for all signing values.
+// However, they don't hurt if left. Let's remove them to be clean if not used.
 
 android {
     namespace = "au.id.dylan.celly_viewer"
@@ -26,20 +26,28 @@ android {
         applicationId = "au.id.dylan.celly_viewer"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutterVersionCode.toInteger()
-        versionName = flutterVersionName
+        versionCode = flutter.versionCode // Use Flutter injected version code
+        versionName = flutter.versionName // Use Flutter injected version name
     }
+
     signingConfigs {
-        release {
-            keyAlias System.getenv("KEY_ALIAS")
-            keyPassword System.getenv("KEY_PASSWORD")
-            storeFile file(System.getenv("KEY_PROPERTIES_PATH"))
-            storePassword System.getenv("KEY_PASSWORD")
+        create("release") {
+            // Directly use environment variables, which will be populated by GitHub Actions secrets
+            // The GitHub Actions workflow step 'Decode Keystore and Setup Signing' creates 'android/release.jks'
+            // So, the path relative to this app/build.gradle.kts is '../release.jks'
+            storeFile = rootProject.file("../release.jks") // Path to the keystore file created by CI
+            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+            keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
         }
     }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.release
+            signingConfig = signingConfigs.getByName("release")
+            // TODO: Add your own R8/ProGuard settings here if needed
+            // isMinifyEnabled = true
+            // proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
