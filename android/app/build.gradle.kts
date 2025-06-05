@@ -11,7 +11,7 @@ plugins {
 android {
     namespace = "au.id.dylan.celly_viewer"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -24,7 +24,7 @@ android {
 
     defaultConfig {
         applicationId = "au.id.dylan.celly_viewer"
-        minSdk = flutter.minSdkVersion
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode // Use Flutter injected version code
         versionName = flutter.versionName // Use Flutter injected version name
