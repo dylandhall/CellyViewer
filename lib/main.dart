@@ -11,11 +11,13 @@
 //
 // 3) We do not remove or scroll away items that are still in flight.
 
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:super_clipboard/super_clipboard.dart';
+import 'settings_model.dart';
+import 'settings_service.dart';
+import 'settings_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -31,7 +33,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const CellularAutomataPage(pow: 4),
+      home: const CellularAutomataPage(), // pow is now managed by settings
     );
   }
 }
@@ -43,23 +45,21 @@ class _GeneratedImage {
 }
 
 class CellularAutomataPage extends StatefulWidget {
-  final int pow;
-  const CellularAutomataPage({super.key, this.pow = 4});
+  const CellularAutomataPage({super.key}); // pow removed from constructor
 
   @override
   State<CellularAutomataPage> createState() => _CellularAutomataPageState();
 }
-
 class _CellularAutomataPageState extends State<CellularAutomataPage> {
   // Cache and concurrency management
   final Map<int, _GeneratedImage> _generatedCache = {};
   final Set<int> _generatingRules = {};
   final int _concurrencyLimit = 4;
-  final int maxStoredImages = 20;
-  // int maxVisibleIndex = 20; // Replaced by _numberOfVisibleItems
+  final int maxActualImages = 20; // Renamed from maxStoredImages
+  final int maxTotalCacheSlots = 40; // Max total items (actual + skipped placeholders)
 
   int _currentStartingRule = 0;
-  int _numberOfVisibleItems = 20; // How many items to show from _currentStartingRule
+  int _numberOfVisibleItems = 20;
   int _currentJumpAmount = 1;
 
   late TextEditingController _ruleInputController;
@@ -68,6 +68,10 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
   final FocusNode _textFieldFocusNode = FocusNode();
   final FocusNode _jumpByFocusNode = FocusNode();
 
+  late AppSettings _currentSettings;
+  final SettingsService _settingsService = SettingsService();
+  bool _isLoadingSettings = true; // To show a loader initially
+
 
   @override
   void initState() {
@@ -75,6 +79,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     _ruleInputController = TextEditingController();
     _jumpByController = TextEditingController(text: _currentJumpAmount.toString());
     _scrollController = ScrollController();
+    _loadAppSettings(); // New method
   }
 
   @override
@@ -87,21 +92,42 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     super.dispose();
   }
 
+  Future<void> _loadAppSettings() async {
+    _currentSettings = await _settingsService.loadSettings();
+    setState(() {
+      _isLoadingSettings = false;
+      // Potentially call _resetListViewAndScroll here if initial view depends heavily on settings
+      // For now, we'll let the initial build use defaults then refresh if settings change.
+    });
+  }
+
   // Helper function to reset list state and scroll to top
   void _resetListViewAndScroll({int? newStartingRule, int? newJumpAmount}) {
-    final maxRulesValue = 1 << (1 << widget.pow);
+    if (_isLoadingSettings) return; // Guard against running before settings are loaded
+
+    final BigInt maxRulesBigInt = BigInt.one << (1 << _currentSettings.bitNumber); // Use loaded setting
     setState(() {
       _generatedCache.clear();
       _generatingRules.clear();
       if (newStartingRule != null) {
-        _currentStartingRule = newStartingRule.clamp(0, maxRulesValue -1);
+        // Clamp _currentStartingRule against a practical int max, or maxRulesBigInt if it fits in int.
+        int maxClampValue = maxRulesBigInt.compareTo(BigInt.from(2147483647)) < 0 // Max int value
+            ? maxRulesBigInt.toInt() - 1 // Use maxRulesBigInt if it fits
+            : 2147483646; // Use a large int max if maxRulesBigInt is too large
+        if (maxClampValue < 0) maxClampValue = 0; // Ensure non-negative
+        _currentStartingRule = newStartingRule.clamp(0, maxClampValue);
       }
       if (newJumpAmount != null) {
-        _currentJumpAmount = newJumpAmount.clamp(1, 99999);
+        // Clamp jump amount against a practical int max, or maxRulesBigInt if it fits in int.
+        int maxJumpClampValue = maxRulesBigInt.compareTo(BigInt.from(99999)) < 0
+            ? maxRulesBigInt.toInt() // Use maxRulesBigInt if it fits
+            : 99999; // Cap at 99999 for practical jump amount
+        if (maxJumpClampValue < 1) maxJumpClampValue = 1; // Ensure at least 1
+        _currentJumpAmount = newJumpAmount.clamp(1, maxJumpClampValue);
         _jumpByController.text = _currentJumpAmount.toString(); // Update text field if changed programmatically
       }
       _numberOfVisibleItems = 20; // Reset to a default page size
-      
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _scrollController.hasClients) {
           _scrollController.jumpTo(0.0);
@@ -117,10 +143,19 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     final String jumpText = _jumpByController.text;
     final int? newJumpAmount = int.tryParse(jumpText);
 
-    final maxRulesValue = 1 << (1 << widget.pow);
+    final BigInt maxRulesBigInt = BigInt.one << (1 << _currentSettings.bitNumber);
 
-    bool ruleIsValid = newRuleNumber != null && newRuleNumber >= 0 && newRuleNumber < maxRulesValue;
-    bool jumpIsValid = newJumpAmount != null && newJumpAmount >= 1 && newJumpAmount <= 99999;
+    // Rule number validation
+    bool ruleIsValid = newRuleNumber != null && newRuleNumber >= 0 && BigInt.from(newRuleNumber) < maxRulesBigInt;
+    
+    // Jump amount validation (assuming jump amount will not exceed int limits)
+    bool jumpIsValid = newJumpAmount != null && newJumpAmount >= 1;
+    // If maxRulesBigInt is within int range, clamp against it. Otherwise, use a practical large int limit.
+    if (maxRulesBigInt.compareTo(BigInt.from(99999)) < 0) { // If maxRulesBigInt is less than 99999
+      jumpIsValid = jumpIsValid && newJumpAmount! <= maxRulesBigInt.toInt();
+    } else {
+      jumpIsValid = jumpIsValid && newJumpAmount! <= 99999; // Cap at 99999 for practical jump amount
+    }
 
     // Dismiss keyboards
     _textFieldFocusNode.unfocus();
@@ -145,7 +180,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
             finalRuleNumber = newRuleNumber;
         } else {
             ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Invalid rule number (0 - ${maxRulesValue - 1}).')),
+                SnackBar(content: Text('Invalid rule number (0 - ${maxRulesBigInt - BigInt.one}).')),
             );
             _ruleInputController.text = _currentStartingRule.toString(); // Reset to current valid
             return; // Stop if rule input was attempted and invalid
@@ -157,7 +192,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
             finalJumpAmount = newJumpAmount;
         } else {
             ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Invalid jump amount (1-999).')),
+                const SnackBar(content: Text('Invalid jump amount (1 - 99999 or max rule number).')),
             );
             _jumpByController.text = _currentJumpAmount.toString(); // Reset to current valid
             return; // Stop if jump input was attempted and invalid
@@ -178,9 +213,41 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     _processInputsAndReset();
   }
 
+  Future<void> _navigateToSettings() async {
+    if (_isLoadingSettings) return; // Don't navigate if settings haven't loaded
+
+    final result = await Navigator.push<bool>( // Expecting a boolean
+      context,
+      MaterialPageRoute(
+        builder: (context) => SettingsPage(
+          initialSettings: _currentSettings,
+          settingsService: _settingsService, // Pass the service instance
+        ),
+      ),
+    );
+
+    if (result == true && mounted) { // Check if settings were saved
+      // Reload settings from service to ensure we have the latest persisted ones
+      await _loadAppSettings(); // This will call setState and update _currentSettings
+
+      // Reset rule and jump to defaults as settings (like bitNumber) have changed
+      _ruleInputController.text = '0'; // Clear or set to default starting rule
+      // _jumpByController.text is handled by _resetListViewAndScroll if newJumpAmount is passed
+
+      _resetListViewAndScroll(newStartingRule: 0, newJumpAmount: 1); // Reset to defaults
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final maxRules = 1 << (1 << widget.pow); // 2^(2^pow)
+    if (_isLoadingSettings) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Loading Settings...')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final BigInt maxRulesBigInt = BigInt.one << (1 << _currentSettings.bitNumber);
     return Scaffold(
       appBar: AppBar(
         centerTitle: true, // Center the entire title widget
@@ -224,7 +291,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                   controller: _jumpByController,
                   focusNode: _jumpByFocusNode,
                   keyboardType: TextInputType.number,
-                  maxLength: 5, // Max 3 digits
+                  maxLength: 5,
                   decoration: const InputDecoration(
                     hintText: 'By',
                     counterText: "", // Hide the counter
@@ -243,6 +310,13 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            onPressed: _navigateToSettings,
+          ),
+        ],
       ),
       body: NotificationListener<ScrollNotification>(
         onNotification: (scrollNotification) {
@@ -252,10 +326,24 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
             if (metrics.pixels >= (metrics.maxScrollExtent - 10)) {
               if (_generatingRules.length < _concurrencyLimit) {
                 setState(() {
-                  // Calculate how many more items can be shown
-                  int maxPossibleItems = (maxRules - _currentStartingRule + _currentJumpAmount - 1) ~/ _currentJumpAmount;
-                  if (_numberOfVisibleItems < maxPossibleItems) {
-                    _numberOfVisibleItems = (_numberOfVisibleItems + 10).clamp(0, maxPossibleItems);
+                  final BigInt currentMaxRules = BigInt.one << (1 << _currentSettings.bitNumber);
+                  BigInt totalPossibleItemsCalculated = BigInt.zero;
+
+                  if (_currentJumpAmount > 0) {
+                    totalPossibleItemsCalculated = (currentMaxRules - BigInt.from(_currentStartingRule) + BigInt.from(_currentJumpAmount) - BigInt.one) ~/ BigInt.from(_currentJumpAmount);
+                  }
+                  if (totalPossibleItemsCalculated < BigInt.zero) {
+                    totalPossibleItemsCalculated = BigInt.zero;
+                  }
+
+                  if (BigInt.from(_numberOfVisibleItems) < totalPossibleItemsCalculated) {
+                    _numberOfVisibleItems += 10;
+                    if (totalPossibleItemsCalculated.isValidInt) {
+                      int totalPossibleInt = totalPossibleItemsCalculated.toInt();
+                      if (_numberOfVisibleItems > totalPossibleInt) {
+                        _numberOfVisibleItems = totalPossibleInt;
+                      }
+                    }
                   }
                 });
               }
@@ -265,12 +353,12 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         },
         child: ListView.builder(
           controller: _scrollController,
-          itemCount: ((maxRules - _currentStartingRule + _currentJumpAmount - 1) ~/ _currentJumpAmount)
-                       .clamp(0, _numberOfVisibleItems), // Calculate max possible items with current jump and clamp by _numberOfVisibleItems
+          itemCount: _numberOfVisibleItems, // Simplified itemCount
           itemBuilder: (context, index) {
             final actualRuleIndex = _currentStartingRule + (index * _currentJumpAmount);
             
-            if (actualRuleIndex >= maxRules) { 
+            // maxRulesBigInt is defined in the build method's outer scope
+            if (BigInt.from(actualRuleIndex) >= maxRulesBigInt) { 
               return const SizedBox.shrink(); 
             }
 
@@ -399,7 +487,13 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     try {
       // Re-enabled original logic:
       // 1) Generate the raw pixel data directly on the main thread
-      final computeResult = _generateRawPixelData(ruleIndex, widget.pow);
+      final computeResult = _generateRawPixelData(
+        ruleIndex,
+        _currentSettings.bitNumber,
+        _currentSettings.width,
+        _currentSettings.height,
+        _currentSettings.minLines,
+      );
 
       final bool isSkipped = computeResult['isSkipped'] as bool;
       final Uint8List? pixelData = computeResult['pixelData'] as Uint8List?;
@@ -421,7 +515,11 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       if (kDebugMode) {
         print('[_startGenerating] Scaling image for rule $ruleIndex.');
       }
-      final scaledImage = await _finalScaleToImage(pixelData, 400, 1000);
+      final scaledImage = await _finalScaleToImage(
+        pixelData,
+        _currentSettings.width,
+        _currentSettings.height,
+      );
       _storeResult(ruleIndex, _GeneratedImage(scaledImage, isSkipped: false));
       if (kDebugMode) {
         print('[_startGenerating] Stored scaled image for rule $ruleIndex.');
@@ -451,24 +549,82 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       }
       return;
     }
+
     setState(() {
       _generatingRules.remove(ruleIndex);
       if (kDebugMode) {
         print('[_storeResult] Removed $ruleIndex from _generatingRules. Current _generatingRules: $_generatingRules');
       }
 
-      // If the cache is full, remove the first (oldest) that is not generating
-      if (_generatedCache.length >= maxStoredImages) {
-        final firstKey = _generatedCache.keys.firstWhere(
-          (k) => !_generatingRules.contains(k),
-          orElse: () => _generatedCache.keys.first,
-        );
-        _generatedCache.remove(firstKey);
+      // Eviction logic
+      if (!image.isSkipped) { // Storing an actual image
+        int actualImageCount = _generatedCache.values.where((img) => !img.isSkipped).length;
+        // Check if the item being added is already in cache as an actual image
+        // If ruleIndex is already in cache and is an actual image, we are replacing it, so count should not include it for this check.
+        if (_generatedCache.containsKey(ruleIndex) && !_generatedCache[ruleIndex]!.isSkipped) {
+          actualImageCount--; // We are replacing an existing actual image
+        }
+
+        if (actualImageCount >= maxActualImages) {
+          // Need to remove the oldest ACTUAL image that is not currently generating
+          int? keyToRemove;
+          for (final entry in _generatedCache.entries) {
+            if (!entry.value.isSkipped && !_generatingRules.contains(entry.key) && entry.key != ruleIndex) {
+              keyToRemove = entry.key;
+              break;
+            }
+          }
+          if (keyToRemove != null) {
+            _generatedCache.remove(keyToRemove);
+            if (kDebugMode) {
+              print('[_storeResult] Evicted actual image for rule $keyToRemove to make space for new actual image $ruleIndex.');
+            }
+          }
+        }
       }
 
+      // Add the new image (or skipped placeholder)
       _generatedCache[ruleIndex] = image;
+
+      // Overall cache size limit (pruning oldest if total exceeds maxTotalCacheSlots)
+      if (_generatedCache.length > maxTotalCacheSlots) {
+          int? keyToRemove;
+          // Try to find the oldest SKIPPED item first that is not currently generating and not the one just added
+          for (final entry in _generatedCache.entries) {
+              if (entry.value.isSkipped && !_generatingRules.contains(entry.key) && entry.key != ruleIndex) {
+                  keyToRemove = entry.key;
+                  break;
+              }
+          }
+          
+          // If no suitable skipped item found, remove the absolute oldest item 
+          // (that's not generating and not the one just added)
+          if (keyToRemove == null && _generatedCache.isNotEmpty) {
+               keyToRemove = _generatedCache.keys.firstWhere(
+                  (k) => !_generatingRules.contains(k) && k != ruleIndex,
+                  orElse: () => -1, // Sentinel if no such key found
+              );
+              if (keyToRemove == -1) keyToRemove = null; // Reset if sentinel was used
+          }
+
+          if (keyToRemove != null) {
+              _generatedCache.remove(keyToRemove);
+              if (kDebugMode) {
+                  print('[_storeResult] Evicted oldest item (rule $keyToRemove) due to total cache size limit.');
+              }
+          } else if (_generatedCache.length > maxTotalCacheSlots && _generatedCache.containsKey(ruleIndex) && _generatedCache.length > 1) {
+            // Fallback: if the cache is still too big and the only item we could remove was the one we just added (which is unlikely but possible)
+            // or no item could be found (e.g. all generating), this is a tricky state.
+            // For now, we'll assume the above logic is sufficient.
+            // A more aggressive strategy might be needed if the cache still overgrows.
+            if (kDebugMode) {
+              print('[_storeResult] Cache still over maxTotalCacheSlots but could not find a suitable item to evict other than the one just added.');
+            }
+          }
+      }
+
       if (kDebugMode) {
-        print('[_storeResult] Added $ruleIndex to _generatedCache. Cache size: ${_generatedCache.length}');
+        print('[_storeResult] Added/Updated $ruleIndex. Cache size: ${_generatedCache.length}, Actual images: ${_generatedCache.values.where((img) => !img.isSkipped).length}');
       }
     });
   }
@@ -507,25 +663,20 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
 
   // This function now runs directly on the main thread.
   // It computes raw pixel data.
-  Map<String, dynamic> _generateRawPixelData(int rule, int pow) {
-    // Dimensions
-  const cols = 400;
-  const rows = 1000;
-  const minLines = 25;
+  Map<String, dynamic> _generateRawPixelData(int rule, int pow, int cols, int rows, int minLines) {
+    // Bits for the rule
+    final ruleBitsLength = 1 << pow;
+    List<bool> ruleBits = List<bool>.generate(
+      ruleBitsLength,
+      (i) => ((rule >> i) & 1) == 1,
+    );
 
-  // Bits for the rule
-  final ruleBitsLength = 1 << pow;
-  List<bool> ruleBits = List<bool>.generate(
-    ruleBitsLength,
-    (i) => ((rule >> i) & 1) == 1,
-  );
-
-  // Our initial row
-  final pixelData = Uint8List(cols * rows * 4);
-  List<bool> line = List<bool>.filled(cols, false);
-  line[(cols / 4).floor()] = true;
-  line[(cols / 3).floor()] = true;
-  line[(2 * (cols / 3)).floor()] = true;
+    // Our initial row
+    final pixelData = Uint8List(cols * rows * 4);
+    List<bool> line = List<bool>.filled(cols, false);
+    line[(cols / 4).floor()] = true;
+    line[(cols / 3).floor()] = true;
+    line[(2 * (cols / 3)).floor()] = true;
 
   List<List<bool>> distinctLines = [];
   bool hasEnoughDistinctLines = false;
