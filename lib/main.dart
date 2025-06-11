@@ -493,6 +493,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         _currentSettings.width,
         _currentSettings.height,
         _currentSettings.minLines,
+        _currentSettings.seedPoints,
       );
 
       final bool isSkipped = computeResult['isSkipped'] as bool;
@@ -663,7 +664,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
 
   // This function now runs directly on the main thread.
   // It computes raw pixel data.
-  Map<String, dynamic> _generateRawPixelData(int rule, int pow, int cols, int rows, int minLines) {
+  Map<String, dynamic> _generateRawPixelData(int rule, int pow, int cols, int rows, int minLines, List<SeedPoint> seedPoints) {
     // Bits for the rule
     final ruleBitsLength = 1 << pow;
     List<bool> ruleBits = List<bool>.generate(
@@ -674,9 +675,20 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     // Our initial row
     final pixelData = Uint8List(cols * rows * 4);
     List<bool> line = List<bool>.filled(cols, false);
-    line[(cols / 4).floor()] = true;
-    line[(cols / 3).floor()] = true;
-    line[(2 * (cols / 3)).floor()] = true;
+    for (final point in seedPoints) {
+      int base = (point.fraction * cols).floor();
+      if (base >= 0 && base < cols) {
+        line[base] = true;
+      }
+      for (int i = 1; i < point.pixels; i++) {
+        int offset = ((i - 1) ~/ 2) + 1;
+        bool after = i % 2 == 1; // start with pixel after
+        int idx = after ? base + offset : base - offset;
+        if (idx >= 0 && idx < cols) {
+          line[idx] = true;
+        }
+      }
+    }
 
   List<List<bool>> distinctLines = [];
   bool hasEnoughDistinctLines = false;

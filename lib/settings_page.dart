@@ -22,6 +22,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late TextEditingController _heightController;
   late TextEditingController _minLinesController;
   late int _selectedBitNumber;
+  late List<SeedPoint> _seedPoints;
 
   @override
   void initState() {
@@ -30,6 +31,9 @@ class _SettingsPageState extends State<SettingsPage> {
     _widthController = TextEditingController(text: widget.initialSettings.width.toString());
     _heightController = TextEditingController(text: widget.initialSettings.height.toString());
     _minLinesController = TextEditingController(text: widget.initialSettings.minLines.toString());
+    _seedPoints = widget.initialSettings.seedPoints
+        .map((e) => SeedPoint(fraction: e.fraction, pixels: e.pixels))
+        .toList();
   }
 
   @override
@@ -47,6 +51,7 @@ class _SettingsPageState extends State<SettingsPage> {
         width: int.parse(_widthController.text),
         height: int.parse(_heightController.text),
         minLines: int.parse(_minLinesController.text),
+        seedPoints: _seedPoints,
       );
 
       await widget.settingsService.saveSettings(newSettings);
@@ -54,6 +59,21 @@ class _SettingsPageState extends State<SettingsPage> {
         Navigator.pop(context, true); // Indicate that settings were saved
       }
     }
+  }
+
+  void _addSeedPoint() {
+    setState(() {
+      _seedPoints.add(SeedPoint(fraction: 0.5, pixels: 1));
+    });
+  }
+
+  void _removeSeedPoint(int index) {
+    if (_seedPoints.length <= 1) return;
+    setState(() {
+      if (_seedPoints.length > 1) {
+        _seedPoints.removeAt(index);
+      }
+    });
   }
 
   @override
@@ -135,6 +155,59 @@ class _SettingsPageState extends State<SettingsPage> {
                   if (n < 1) return 'Minimum lines must be at least 1.';
                   return null;
                 },
+              ),
+              const SizedBox(height: 24),
+              Column(
+                children: List.generate(_seedPoints.length, (index) {
+                  final sp = _seedPoints[index];
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Slider(
+                          value: sp.fraction,
+                          onChanged: (v) {
+                            setState(() {
+                              sp.fraction = v;
+                            });
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 60,
+                        child: DropdownButton<int>(
+                          isExpanded: true,
+                          value: sp.pixels.clamp(1, 8),
+                          items: List.generate(8, (i) => i + 1)
+                              .map((v) => DropdownMenuItem(
+                                    value: v,
+                                    child: Text('$v'),
+                                  ))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() {
+                                sp.pixels = val;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete),
+                        onPressed: _seedPoints.length == 1
+                            ? null
+                            : () => _removeSeedPoint(index),
+                      ),
+                    ],
+                  );
+                }),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: _addSeedPoint,
+                  child: const Text('Add Point'),
+                ),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
