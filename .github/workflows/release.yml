@@ -170,14 +170,16 @@ jobs:
           publish_dir: ./build/web
 
   create-release:
-    needs: [get-version, build-windows, build-android, build-macos] 
+    needs: [get-version, build-windows, build-android, build-macos]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
           name: windows-build-${{ needs.get-version.outputs.version }}
-          path: ./artifacts/windows/ 
+          path: ./artifacts/windows/
       - name: Download Android artifact
         uses: actions/download-artifact@v4
         with:
