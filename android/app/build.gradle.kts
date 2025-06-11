@@ -33,7 +33,7 @@ android {
     signingConfigs {
         create("release") {
             // Directly use environment variables, which will be populated by GitHub Actions secrets
-            // The GitHub Actions workflow step 'Decode Keystore and Setup Signing' creates 'android/release.jks'
+            // The GitHub Actions workflow step "Decode Keystore" writes the key to 'release.jks' at the repository root
             // So, the path relative to this app/build.gradle.kts is '../release.jks'
             storeFile = rootProject.file("../release.jks") // Path to the keystore file created by CI
             storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")

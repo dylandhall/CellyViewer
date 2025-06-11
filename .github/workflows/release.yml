@@ -86,7 +86,7 @@ jobs:
       - name: Decode Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PATH_IN_CI: android/release.jks # Define path here
+          KEYSTORE_PATH_IN_CI: release.jks # Path where the keystore will be written
         run: |
           echo "Decoding keystore..."
           mkdir -p $(dirname "$KEYSTORE_PATH_IN_CI") # Ensure directory exists
@@ -96,7 +96,7 @@ jobs:
       - name: Build Android APK (Signed)
         env:
           # Pass all necessary values as environment variables for Gradle
-          ANDROID_KEYSTORE_PATH_FROM_CI: android/release.jks # Path to the decoded keystore
+          ANDROID_KEYSTORE_PATH_FROM_CI: release.jks # Path to the decoded keystore
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
