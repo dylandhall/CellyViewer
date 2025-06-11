@@ -48,7 +48,9 @@ jobs:
         run: |
           $VERSION = "${{ needs.get-version.outputs.version }}"
           $ARTIFACT_NAME = "CellyViewer-Windows-v$VERSION.zip"
-          $BUILD_OUTPUT_PATH = "build\windows\runner\Release"
+          # Flutter places the release build under an architecture specific
+          # directory (e.g. `build\windows\x64\runner\Release`)
+          $BUILD_OUTPUT_PATH = "build\windows\x64\runner\Release"
           $DESTINATION_ZIP_PATH = Join-Path $env:GITHUB_WORKSPACE $ARTIFACT_NAME
           Compress-Archive -Path "$BUILD_OUTPUT_PATH\*" -DestinationPath $DESTINATION_ZIP_PATH -Force
           echo "artifact_name=$ARTIFACT_NAME" >> $env:GITHUB_OUTPUT
@@ -137,7 +139,8 @@ jobs:
         run: |
           VERSION="${{ needs.get-version.outputs.version }}"
           ARTIFACT_NAME="CellyViewer-macOS-v$VERSION.zip"
-          ditto -c -k --sequesterRsrc --keepParent "build/macos/Build/Products/Release/CellyViewer.app" "$GITHUB_WORKSPACE/$ARTIFACT_NAME"
+          # The build product is named `celly_viewer.app` by Flutter
+          ditto -c -k --sequesterRsrc --keepParent "build/macos/Build/Products/Release/celly_viewer.app" "$GITHUB_WORKSPACE/$ARTIFACT_NAME"
           echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
           echo "macOS artifact prepared: $GITHUB_WORKSPACE/$ARTIFACT_NAME"
       - name: Upload macOS Artifact
