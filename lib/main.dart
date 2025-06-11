@@ -151,10 +151,10 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     // Jump amount validation (assuming jump amount will not exceed int limits)
     bool jumpIsValid = newJumpAmount != null && newJumpAmount >= 1;
     // If maxRulesBigInt is within int range, clamp against it. Otherwise, use a practical large int limit.
-    if (maxRulesBigInt.compareTo(BigInt.from(99999)) < 0) { // If maxRulesBigInt is less than 99999
-      jumpIsValid = jumpIsValid && newJumpAmount! <= maxRulesBigInt.toInt();
+    if (maxRulesBigInt.compareTo(BigInt.from(99999)) < 0) {
+      jumpIsValid = jumpIsValid && newJumpAmount <= maxRulesBigInt.toInt();
     } else {
-      jumpIsValid = jumpIsValid && newJumpAmount! <= 99999; // Cap at 99999 for practical jump amount
+      jumpIsValid = jumpIsValid && newJumpAmount <= 99999;
     }
 
     // Dismiss keyboards
@@ -417,21 +417,22 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
 
                                   try {
                                     await clipboard.write([item]);
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Image for Rule $actualRuleIndex copied!')),
-                                      );
-                                    }
                                   } catch (e) {
                                     if (kDebugMode) {
                                       print('Error copying to clipboard: $e');
                                     }
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Failed to copy image: $e')),
-                                      );
-                                    }
+                                    if (!mounted) return;
+                                    // ignore: use_build_context_synchronously
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Failed to copy image: $e')),
+                                    );
+                                    return;
                                   }
+                                  if (!mounted) return;
+                                  // ignore: use_build_context_synchronously
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Image for Rule $actualRuleIndex copied!')),
+                                  );
                                 },
                               ),
                             ),
