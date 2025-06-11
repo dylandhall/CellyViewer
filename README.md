@@ -1,6 +1,10 @@
 # celly_viewer
 
-Cellular Automatia Viewer
+A simple viewer for generating and browsing cellular automata images.
+
+## Download
+
+The latest Android release can be found on the repository's Releases page. You can also run the app in the browser from the GitHub Pages site.
 
 ## Getting Started
 
