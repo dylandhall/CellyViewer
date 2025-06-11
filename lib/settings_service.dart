@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert'; // For jsonEncode/Decode
+import 'package:flutter/foundation.dart';
 import 'settings_model.dart';
 
 class SettingsService {
@@ -17,11 +18,11 @@ class SettingsService {
     if (settingsJson != null) {
       try {
         return AppSettings.fromMap(jsonDecode(settingsJson));
-      } catch (e) {
-        // Handle potential parsing errors, return defaults
-        print("Error loading settings: $e");
-        return AppSettings(); // Default if parsing fails
-      }
+        } catch (e) {
+          // Handle potential parsing errors, return defaults
+          debugPrint('Error loading settings: $e');
+          return AppSettings(); // Default if parsing fails
+        }
     }
     return AppSettings(); // Default if nothing saved
   }
