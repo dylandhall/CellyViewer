@@ -14,7 +14,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:super_clipboard/super_clipboard.dart' deferred as super_clipboard;
+import 'package:super_clipboard/super_clipboard.dart';
 import 'settings_model.dart';
 import 'settings_service.dart';
 import 'settings_page.dart';
@@ -460,54 +460,28 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                                     );
                                   }
 
-                                  try {
-                                    await super_clipboard.loadLibrary();
-                                  } catch (e) {
-                                    if (kDebugMode) {
-                                      print('Failed to load clipboard library: $e');
-                                    }
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Clipboard API not available on this platform.',
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                    return;
-                                  }
-
-                                  var clipboard;
-                                  try {
-                                    clipboard = super_clipboard.SystemClipboard.instance;
-                                  } catch (e) {
-                                    if (kDebugMode) {
-                                      print('Clipboard support error: $e');
-                                    }
-                                    clipboard = null;
-                                  }
+                                  final clipboard = SystemClipboard.instance;
                                   if (clipboard == null) {
-                                    if (mounted) {
-                                      // Check if the widget is still in the tree
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Clipboard API not available on this platform.',
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                    return;
+                                      if (mounted) {
+                                        // Check if the widget is still in the tree
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Clipboard API not available on this platform.',
+                                              ),
+                                            ),
+                                          );
+                                      }
+                                      return;
                                   }
 
-                                  final item = super_clipboard.DataWriterItem();
+                                  final item = DataWriterItem();
                                   // Add PNG representation using the Formats class.
                                   // Formats.png is a pre-defined DataFormat<Uint8List>.
                                   // Calling it with the bytes will produce the EncodedData.
-                                  item.add(super_clipboard.Formats.png(bytes));
+                                  item.add(Formats.png(bytes));
 
                                   // Example of adding a text fallback:
                                   // item.add(super_clipboard.Formats.plainText('Cellular Automaton Image - Rule $actualRuleIndex'));
