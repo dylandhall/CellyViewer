@@ -38053,13 +38053,13 @@ $S:224}
 A.adc.prototype={
 $0(){var s=0,r=A.K(t.H),q,p=2,o=[],n=this,m,l,k,j,i,h
 var $async$$0=A.L(function(a,b){if(a===1){o.push(b)
-s=p}while(true)switch(s){case 0:i=A.aDY()
-if(i==null){if(n.a.c!=null)n.c.ag(t.Pu).f.nJ(B.Nu)
+s=p}while(true)switch(s){case 0:i=null
+try{i=A.aDY()}catch(g){i=null}if(i==null){if(n.a.c!=null)n.c.ag(t.Pu).f.nJ(B.Nu)
 s=1
-break}k=$.ah()
-m=new A.vR(new A.zg(k),new A.zg(k),A.b([],t.T2))
-k=A.b([new A.vP(B.b.ga6(B.Bb.Br(B.i2)),n.b.a.a)],t.U0)
-m.c.push(new A.no(k))
+break}j=$.ah()
+m=new A.vR(new A.zg(j),new A.zg(j),A.b([],t.T2))
+j=A.b([new A.vP(B.b.ga6(B.Bb.Br(B.i2)),n.b.a.a)],t.U0)
+m.c.push(new A.no(j))
 p=4
 s=7
 return A.O(i.ff(A.b([m],t.oL)),$async$$0)
