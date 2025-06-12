@@ -27,6 +27,13 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <!-- Provider required by super_clipboard for writing images -->
+        <provider
+            android:name="com.superlist.super_native_extensions.DataProvider"
+            android:authorities="au.id.dylan.celly_viewer.SuperClipboardDataProvider"
+            android:exported="true"
+            android:grantUriPermissions="true" />
         <provider
             android:name="com.superlist.super_native_extensions.DataProvider"
             android:authorities="au.id.dylan.celly_viewer.SuperClipboardDataProvider"

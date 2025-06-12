@@ -460,21 +460,25 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                                     );
                                   }
 
-                                  final clipboard = SystemClipboard.instance;
+                                  SystemClipboard? clipboard;
+                                  try {
+                                    clipboard = SystemClipboard.instance;
+                                  } catch (_) {
+                                    clipboard = null;
+                                  }
                                   if (clipboard == null) {
-                                      if (mounted) {
-                                        // Check if the widget is still in the tree
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Clipboard API not available on this platform.',
-                                              ),
-                                            ),
-                                          );
-                                      }
-                                      return;
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Clipboard API not available on this platform.',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    return;
                                   }
 
                                   final item = DataWriterItem();
