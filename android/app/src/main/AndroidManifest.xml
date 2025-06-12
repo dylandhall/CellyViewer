@@ -3,7 +3,8 @@
         android:label="celly_viewer"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:enableOnBackInvokedCallback="true">
+        android:enableOnBackInvokedCallback="true"
+        android:extractNativeLibs="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -26,8 +27,12 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Don't delete the meta-data below.
-             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <!-- Provider required by super_clipboard for writing images -->
+        <provider
+            android:name="com.superlist.super_native_extensions.DataProvider"
+            android:authorities="au.id.dylan.celly_viewer.SuperClipboardDataProvider"
+            android:exported="true"
+            android:grantUriPermissions="true" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
