@@ -427,8 +427,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                     Center(
                       // Center the Row containing Text and IconButton
                       child: Row(
-                        mainAxisSize: MainAxisSize
-                            .min, // Row takes minimum space needed by children
+                        mainAxisSize: MainAxisSize.min, // Row takes minimum space needed by children
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
@@ -437,8 +436,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                                 : 'Image $actualRuleIndex',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          if (!gen
-                              .isSkipped) // Only show copy button if there's an image
+                          if (!gen.isSkipped) // Only show copy button if there's an image
                             Padding(
                               // Add a little padding to the left of the icon
                               padding: const EdgeInsets.only(left: 8.0),
@@ -463,7 +461,13 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                                   SystemClipboard? clipboard;
                                   try {
                                     clipboard = SystemClipboard.instance;
-                                  } catch (_) {
+                                  } catch (e) {
+                                    if (kDebugMode) {
+                                      print(
+                                        'Can\'t get systemp clipboard instance, error: $e',
+                                      );
+                                    }
+
                                     clipboard = null;
                                   }
                                   if (clipboard == null) {
