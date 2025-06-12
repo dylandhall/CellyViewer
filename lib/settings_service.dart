@@ -4,7 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'settings_model.dart';
 
 class SettingsService {
-  static const String _settingsKey = 'app_settings_v1'; // Added a version for future-proofing
+  static const String _settingsKey =
+      'app_settings_v1'; // Added a version for future-proofing
 
   Future<void> saveSettings(AppSettings settings) async {
     final prefs = await SharedPreferences.getInstance();
@@ -18,11 +19,12 @@ class SettingsService {
     if (settingsJson != null) {
       try {
         return AppSettings.fromMap(jsonDecode(settingsJson));
-        } catch (e) {
-          // Handle potential parsing errors, return defaults
-          debugPrint('Error loading settings: $e');
-          return AppSettings(); // Default if parsing fails
-        }
+      } catch (e) {
+        // Handle potential parsing errors, return defaults and clear corrupt data
+        debugPrint('Error loading settings: $e. Clearing stored settings.');
+        await prefs.remove(_settingsKey);
+        return AppSettings(); // Default if parsing fails
+      }
     }
     return AppSettings(); // Default if nothing saved
   }
