@@ -85,4 +85,14 @@ void main() {
     expect(service.saveCalled, isFalse);
     expect(find.byType(SettingsPage), findsOneWidget);
   });
+
+  test('corrupt settings are cleared on load', () async {
+    SharedPreferences.setMockInitialValues({'app_settings_v1': 'not json'});
+    final prefs = await SharedPreferences.getInstance();
+    final service = SettingsService();
+
+    final settings = await service.loadSettings();
+    expect(settings.width, AppSettings().width);
+    expect(prefs.getString('app_settings_v1'), isNull);
+  });
 }
