@@ -1,4 +1,7 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences/shared_preferences.dart'
+    show
+        SharedPreferencesWithCache,
+        SharedPreferencesWithCacheOptions;
 import 'dart:convert'; // For jsonEncode/Decode
 import 'package:flutter/foundation.dart';
 import 'settings_model.dart';
@@ -8,13 +11,21 @@ class SettingsService {
       'app_settings_v1'; // Added a version for future-proofing
 
   Future<void> saveSettings(AppSettings settings) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferencesWithCache.create(
+      cacheOptions: SharedPreferencesWithCacheOptions(
+        allowList: {_settingsKey},
+      ),
+    );
     String settingsJson = jsonEncode(settings.toMap());
     await prefs.setString(_settingsKey, settingsJson);
   }
 
   Future<AppSettings> loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferencesWithCache.create(
+      cacheOptions: SharedPreferencesWithCacheOptions(
+        allowList: {_settingsKey},
+      ),
+    );
     String? settingsJson = prefs.getString(_settingsKey);
     if (settingsJson != null) {
       try {

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
+import 'package:shared_preferences/shared_preferences.dart'
+    show SharedPreferencesOptions;
 
 import 'package:celly_viewer/main.dart';
 import 'package:celly_viewer/settings_page.dart';
@@ -20,7 +23,8 @@ class TestSettingsService extends SettingsService {
 
 void main() {
   setUp(() {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
   });
 
   testWidgets('invalid rule number does not crash', (
@@ -87,12 +91,19 @@ void main() {
   });
 
   test('corrupt settings are cleared on load', () async {
-    SharedPreferences.setMockInitialValues({'app_settings_v1': 'not json'});
-    final prefs = await SharedPreferences.getInstance();
+    final backend =
+        InMemorySharedPreferencesAsync.withData({'app_settings_v1': 'not json'});
+    SharedPreferencesAsyncPlatform.instance = backend;
     final service = SettingsService();
 
     final settings = await service.loadSettings();
     expect(settings.width, AppSettings().width);
-    expect(prefs.getString('app_settings_v1'), isNull);
+    expect(
+      await backend.getString(
+        'app_settings_v1',
+        const SharedPreferencesOptions(),
+      ),
+      isNull,
+    );
   });
 }
