@@ -460,7 +460,15 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                                     );
                                   }
 
-                                  final clipboard = SystemClipboard.instance;
+                                  SystemClipboard? clipboard;
+                                  try {
+                                    clipboard = SystemClipboard.instance;
+                                  } catch (e) {
+                                    if (kDebugMode) {
+                                      print('Clipboard support error: $e');
+                                    }
+                                    clipboard = null;
+                                  }
                                   if (clipboard == null) {
                                     if (mounted) {
                                       // Check if the widget is still in the tree
