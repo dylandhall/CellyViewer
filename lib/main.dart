@@ -14,7 +14,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:super_clipboard/super_clipboard.dart';
+import 'package:super_clipboard/super_clipboard.dart' deferred as super_clipboard;
 import 'settings_model.dart';
 import 'settings_service.dart';
 import 'settings_page.dart';
@@ -460,9 +460,27 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                                     );
                                   }
 
-                                  SystemClipboard? clipboard;
                                   try {
-                                    clipboard = SystemClipboard.instance;
+                                    await super_clipboard.loadLibrary();
+                                  } catch (e) {
+                                    if (kDebugMode) {
+                                      print('Failed to load clipboard library: $e');
+                                    }
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Clipboard API not available on this platform.',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    return;
+                                  }
+
+                                  var clipboard;
+                                  try {
+                                    clipboard = super_clipboard.SystemClipboard.instance;
                                   } catch (e) {
                                     if (kDebugMode) {
                                       print('Clipboard support error: $e');
@@ -485,14 +503,14 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                                     return;
                                   }
 
-                                  final item = DataWriterItem();
+                                  final item = super_clipboard.DataWriterItem();
                                   // Add PNG representation using the Formats class.
                                   // Formats.png is a pre-defined DataFormat<Uint8List>.
                                   // Calling it with the bytes will produce the EncodedData.
-                                  item.add(Formats.png(bytes));
+                                  item.add(super_clipboard.Formats.png(bytes));
 
                                   // Example of adding a text fallback:
-                                  // item.add(Formats.plainText('Cellular Automaton Image - Rule $actualRuleIndex'));
+                                  // item.add(super_clipboard.Formats.plainText('Cellular Automaton Image - Rule $actualRuleIndex'));
 
                                   try {
                                     await clipboard.write([item]);
