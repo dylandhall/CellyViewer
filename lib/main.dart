@@ -12,6 +12,7 @@
 // 3) We do not remove or scroll away items that are still in flight.
 
 import 'dart:ui' as ui;
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:super_clipboard/super_clipboard.dart';
@@ -427,7 +428,8 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                     Center(
                       // Center the Row containing Text and IconButton
                       child: Row(
-                        mainAxisSize: MainAxisSize.min, // Row takes minimum space needed by children
+                        mainAxisSize: MainAxisSize
+                            .min, // Row takes minimum space needed by children
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
@@ -436,7 +438,8 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                                 : 'Image $actualRuleIndex',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          if (!gen.isSkipped) // Only show copy button if there's an image
+                          if (!gen
+                              .isSkipped) // Only show copy button if there's an image
                             Padding(
                               // Add a little padding to the left of the icon
                               padding: const EdgeInsets.only(left: 8.0),
@@ -583,7 +586,6 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         _currentSettings.bitNumber,
         _currentSettings.width,
         _currentSettings.height,
-        _currentSettings.minLines,
         _currentSettings.seedPoints,
       );
 
@@ -800,7 +802,6 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     int pow,
     int cols,
     int rows,
-    int minLines,
     List<SeedPoint> seedPoints,
   ) {
     // Bits for the rule
@@ -828,8 +829,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       }
     }
 
-    List<List<bool>> distinctLines = [];
-    bool hasEnoughDistinctLines = false;
+    List<List<bool>> lines = [];
 
     for (int l = 0; l < rows; l++) {
       final fractionThrough = l / rows;
@@ -867,34 +867,15 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         newLine[i + (pow ~/ 2)] = ruleBits[val];
       }
 
-      // Distinct line check
-      if (!hasEnoughDistinctLines) {
-        // If not possible to reach minLines, skip
-        if ((rows - l) < (minLines - distinctLines.length)) {
-          return {'isSkipped': true, 'pixelData': null};
-        }
-
-        bool identical = false;
-        for (var dLine in distinctLines) {
-          if (_linesIdentical(dLine, newLine)) {
-            identical = true;
-            break;
-          }
-        }
-        if (!identical) {
-          if (distinctLines.length >= minLines) {
-            hasEnoughDistinctLines = true;
-            distinctLines.clear();
-          } else {
-            distinctLines.add(newLine);
-          }
-        }
-      }
+      lines.add(List<bool>.from(line));
 
       line = newLine;
     }
 
-    if (!hasEnoughDistinctLines) {
+    final counts = _getSortedPatternCounts(lines);
+    final gradient = _calculateGradient(counts);
+    final passes = _passesGradientFilter(gradient);
+    if (!passes) {
       return {'isSkipped': true, 'pixelData': null};
     }
 
@@ -929,10 +910,52 @@ Future<MemoryImage> _make1x1WhiteImage() async {
   return MemoryImage(Uint8List.view(pngBytes!.buffer));
 }
 
-bool _linesIdentical(List<bool> a, List<bool> b) {
-  if (a.length != b.length) return false;
-  for (int i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
+List<int> _getSortedPatternCounts(List<List<bool>> lines) {
+  if (lines.length < 3 || lines[0].length < 3) {
+    return [];
   }
-  return true;
+  final counts = List<int>.filled(512, 0);
+  final rows = lines.length;
+  final cols = lines[0].length;
+  for (int r = 0; r < rows - 2; r++) {
+    for (int c = 0; c < cols - 2; c++) {
+      int val = 0;
+      for (int dr = 0; dr < 3; dr++) {
+        for (int dc = 0; dc < 3; dc++) {
+          if (lines[r + dr][c + dc]) {
+            val |= 1 << (dr * 3 + dc);
+          }
+        }
+      }
+      counts[val]++;
+    }
+  }
+  final sorted = List<int>.from(counts)..sort((a, b) => b.compareTo(a));
+  return sorted;
+}
+
+double _calculateGradient(List<int> sortedCounts) {
+  if (sortedCounts.isEmpty) return 0;
+  final n = sortedCounts.length;
+  double sumX = 0;
+  double sumY = 0;
+  double sumXY = 0;
+  double sumX2 = 0;
+  for (int i = 0; i < n; i++) {
+    final x = i.toDouble();
+    final y = sortedCounts[i].toDouble();
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumX2 += x * x;
+  }
+  final numerator = n * sumXY - sumX * sumY;
+  final denominator = n * sumX2 - sumX * sumX;
+  if (denominator == 0) return 0;
+  return numerator / denominator;
+}
+
+bool _passesGradientFilter(double gradient) {
+  final normalized = (2 / math.pi) * math.atan(gradient.abs());
+  return normalized > 0.1 && normalized < 0.9;
 }

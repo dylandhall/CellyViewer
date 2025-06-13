@@ -4,35 +4,32 @@ class SeedPoint {
 
   SeedPoint({this.fraction = 0.5, this.pixels = 1});
 
-  Map<String, dynamic> toMap() => {
-        'fraction': fraction,
-        'pixels': pixels,
-      };
+  Map<String, dynamic> toMap() => {'fraction': fraction, 'pixels': pixels};
 
   factory SeedPoint.fromMap(Map<String, dynamic> map) => SeedPoint(
-        fraction: (map['fraction'] as num?)?.toDouble() ?? 0.5,
-        pixels: map['pixels'] ?? 1,
-      );
+    fraction: (map['fraction'] as num?)?.toDouble() ?? 0.5,
+    pixels: map['pixels'] ?? 1,
+  );
 }
 
 class AppSettings {
   int bitNumber;
   int width;
   int height;
-  int minLines;
   List<SeedPoint> seedPoints;
 
   AppSettings({
     this.bitNumber = 4, // Default for pow
     this.width = 400,
     this.height = 1000,
-    this.minLines = 25,
     List<SeedPoint>? seedPoints,
-  }) : seedPoints = seedPoints ?? [
-          SeedPoint(fraction: 0.25, pixels: 1),
-          SeedPoint(fraction: 1 / 3, pixels: 1),
-          SeedPoint(fraction: 2 / 3, pixels: 1),
-        ];
+  }) : seedPoints =
+           seedPoints ??
+           [
+             SeedPoint(fraction: 0.25, pixels: 1),
+             SeedPoint(fraction: 1 / 3, pixels: 1),
+             SeedPoint(fraction: 2 / 3, pixels: 1),
+           ];
 
   // For storing as a single JSON string in shared_preferences
   Map<String, dynamic> toMap() {
@@ -40,7 +37,6 @@ class AppSettings {
       'bitNumber': bitNumber,
       'width': width,
       'height': height,
-      'minLines': minLines,
       'seedPoints': seedPoints.map((e) => e.toMap()).toList(),
     };
   }
@@ -57,7 +53,6 @@ class AppSettings {
       bitNumber: map['bitNumber'] ?? 4,
       width: map['width'] ?? 400,
       height: map['height'] ?? 1000,
-      minLines: map['minLines'] ?? 25,
       seedPoints: seeds,
     );
   }
