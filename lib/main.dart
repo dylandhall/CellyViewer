@@ -181,11 +181,12 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     final BigInt maxRulesBigInt =
         BigInt.one << (1 << _currentSettings.bitNumber);
     while (_generatingRules.length < _concurrencyLimit &&
-        _nextRuleOffset < _numberOfVisibleItems) {
+        (_displayItems.whereType<_ImageEntry>().length +
+                _generatingRules.length) <
+            _numberOfVisibleItems) {
       final int ruleIndex =
           _currentStartingRule + (_nextRuleOffset * _currentJumpAmount);
       if (BigInt.from(ruleIndex) >= maxRulesBigInt) {
-        _nextRuleOffset = _numberOfVisibleItems;
         break;
       }
       _nextRuleOffset++;
@@ -207,10 +208,16 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         break;
       }
     }
-    if (_displayItems.isNotEmpty && _displayItems.first is _SkippedEntry) {
+    // Remove skipped entries that no longer have images on either side
+    while (_displayItems.isNotEmpty &&
+        _displayItems.first is _SkippedEntry &&
+        (_displayItems.length == 1 || _displayItems[1] is _SkippedEntry)) {
       _displayItems.removeAt(0);
     }
-    if (_displayItems.isNotEmpty && _displayItems.last is _SkippedEntry) {
+    while (_displayItems.isNotEmpty &&
+        _displayItems.last is _SkippedEntry &&
+        (_displayItems.length == 1 ||
+            _displayItems[_displayItems.length - 2] is _SkippedEntry)) {
       _displayItems.removeLast();
     }
   }
@@ -473,7 +480,14 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
           itemCount:
               _displayItems.length +
               ((_generatingRules.isNotEmpty ||
-                      _nextRuleOffset < _numberOfVisibleItems)
+                          (_displayItems.whereType<_ImageEntry>().length +
+                                  _generatingRules.length) <
+                              _numberOfVisibleItems) &&
+                      BigInt.from(
+                            _currentStartingRule +
+                                (_nextRuleOffset * _currentJumpAmount),
+                          ) <
+                          (BigInt.one << (1 << _currentSettings.bitNumber))
                   ? 1
                   : 0),
           itemBuilder: (context, index) {
@@ -565,7 +579,9 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
                 child: Center(
                   child: Text(
-                    '${entry.count} images were too simple to display',
+                    entry.count == 1
+                        ? '1 image was too simple to display'
+                        : '${entry.count} images were too simple to display',
                   ),
                 ),
               );
