@@ -874,7 +874,13 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
 
     final counts = _getSortedPatternCounts(lines);
     final gradient = _calculateGradient(counts);
+    final normalized = _normalizedGradient(gradient);
     final passes = _passesGradientFilter(gradient);
+    if (kDebugMode) {
+      final top = counts.take(5).join(',');
+      print(
+          '[patternDebug] rule:$rule patterns:${counts.length} top:$top gradient:${gradient.toStringAsFixed(4)} normalized:${normalized.toStringAsFixed(4)} pass:$passes');
+    }
     if (!passes) {
       return {'isSkipped': true, 'pixelData': null};
     }
@@ -930,7 +936,8 @@ List<int> _getSortedPatternCounts(List<List<bool>> lines) {
       counts[val]++;
     }
   }
-  final sorted = List<int>.from(counts)..sort((a, b) => b.compareTo(a));
+  final sorted = counts.where((c) => c > 0).toList()
+    ..sort((a, b) => b.compareTo(a));
   return sorted;
 }
 
@@ -956,6 +963,10 @@ double _calculateGradient(List<int> sortedCounts) {
 }
 
 bool _passesGradientFilter(double gradient) {
-  final normalized = (2 / math.pi) * math.atan(gradient.abs());
+  final normalized = _normalizedGradient(gradient);
   return normalized > 0.1 && normalized < 0.9;
+}
+
+double _normalizedGradient(double gradient) {
+  return (2 / math.pi) * math.atan(gradient.abs());
 }
