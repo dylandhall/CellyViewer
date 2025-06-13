@@ -15,6 +15,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:super_clipboard/super_clipboard.dart';
+import 'pattern_utils.dart';
 import 'settings_model.dart';
 import 'settings_service.dart';
 import 'settings_page.dart';
@@ -427,7 +428,8 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                     Center(
                       // Center the Row containing Text and IconButton
                       child: Row(
-                        mainAxisSize: MainAxisSize.min, // Row takes minimum space needed by children
+                        mainAxisSize: MainAxisSize
+                            .min, // Row takes minimum space needed by children
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
@@ -436,7 +438,8 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                                 : 'Image $actualRuleIndex',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          if (!gen.isSkipped) // Only show copy button if there's an image
+                          if (!gen
+                              .isSkipped) // Only show copy button if there's an image
                             Padding(
                               // Add a little padding to the left of the icon
                               padding: const EdgeInsets.only(left: 8.0),
@@ -583,8 +586,9 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         _currentSettings.bitNumber,
         _currentSettings.width,
         _currentSettings.height,
-        _currentSettings.minLines,
         _currentSettings.seedPoints,
+        _currentSettings.minGradient,
+        _currentSettings.maxGradient,
       );
 
       final bool isSkipped = computeResult['isSkipped'] as bool;
@@ -800,8 +804,9 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     int pow,
     int cols,
     int rows,
-    int minLines,
     List<SeedPoint> seedPoints,
+    double minGradient,
+    double maxGradient,
   ) {
     // Bits for the rule
     final ruleBitsLength = 1 << pow;
@@ -828,8 +833,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       }
     }
 
-    List<List<bool>> distinctLines = [];
-    bool hasEnoughDistinctLines = false;
+    List<List<bool>> lines = [];
 
     for (int l = 0; l < rows; l++) {
       final fractionThrough = l / rows;
@@ -867,34 +871,21 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         newLine[i + (pow ~/ 2)] = ruleBits[val];
       }
 
-      // Distinct line check
-      if (!hasEnoughDistinctLines) {
-        // If not possible to reach minLines, skip
-        if ((rows - l) < (minLines - distinctLines.length)) {
-          return {'isSkipped': true, 'pixelData': null};
-        }
-
-        bool identical = false;
-        for (var dLine in distinctLines) {
-          if (_linesIdentical(dLine, newLine)) {
-            identical = true;
-            break;
-          }
-        }
-        if (!identical) {
-          if (distinctLines.length >= minLines) {
-            hasEnoughDistinctLines = true;
-            distinctLines.clear();
-          } else {
-            distinctLines.add(newLine);
-          }
-        }
-      }
+      lines.add(List<bool>.from(line));
 
       line = newLine;
     }
 
-    if (!hasEnoughDistinctLines) {
+    final counts = getSortedPatternCounts(lines);
+    final gradient = calculateGradient(counts);
+    final normalized = normalizedGradient(gradient);
+    final passes = passesGradientFilter(gradient, minGradient, maxGradient);
+    if (kDebugMode) {
+      final top = counts.take(5).join(',');
+      print(
+          '[patternDebug] rule:$rule patterns:${counts.length} top:$top gradient:${gradient.toStringAsFixed(4)} normalized:${normalized.toStringAsFixed(4)} min:$minGradient max:$maxGradient pass:$passes');
+    }
+    if (!passes) {
       return {'isSkipped': true, 'pixelData': null};
     }
 
@@ -929,10 +920,3 @@ Future<MemoryImage> _make1x1WhiteImage() async {
   return MemoryImage(Uint8List.view(pngBytes!.buffer));
 }
 
-bool _linesIdentical(List<bool> a, List<bool> b) {
-  if (a.length != b.length) return false;
-  for (int i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
-}

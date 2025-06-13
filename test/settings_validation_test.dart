@@ -47,29 +47,6 @@ void main() {
     expect(fieldWidget.controller?.text, '0');
   });
 
-  testWidgets('invalid minLines value not saved', (WidgetTester tester) async {
-    final service = TestSettingsService();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: SettingsPage(
-          initialSettings: AppSettings(),
-          settingsService: service,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final minLinesField = find.widgetWithText(
-      TextFormField,
-      'Minimum Unique Lines (MinLines)',
-    );
-    await tester.enterText(minLinesField, 'abc');
-    final formState = tester.state<FormState>(find.byType(Form));
-    expect(formState.validate(), isFalse);
-    expect(service.saveCalled, isFalse);
-    expect(find.byType(SettingsPage), findsOneWidget);
-  });
-
   testWidgets('invalid width value not saved', (WidgetTester tester) async {
     final service = TestSettingsService();
     await tester.pumpWidget(
@@ -91,8 +68,9 @@ void main() {
   });
 
   test('corrupt settings are cleared on load', () async {
-    final backend =
-        InMemorySharedPreferencesAsync.withData({'app_settings_v1': 'not json'});
+    final backend = InMemorySharedPreferencesAsync.withData({
+      'app_settings_v1': 'not json',
+    });
     SharedPreferencesAsyncPlatform.instance = backend;
     final service = SettingsService();
 

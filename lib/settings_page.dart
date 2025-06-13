@@ -20,27 +20,32 @@ class _SettingsPageState extends State<SettingsPage> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _widthController;
   late TextEditingController _heightController;
-  late TextEditingController _minLinesController;
   late int _selectedBitNumber;
   late List<SeedPoint> _seedPoints;
+  late double _minGradient;
+  late double _maxGradient;
 
   @override
   void initState() {
     super.initState();
     _selectedBitNumber = widget.initialSettings.bitNumber;
-    _widthController = TextEditingController(text: widget.initialSettings.width.toString());
-    _heightController = TextEditingController(text: widget.initialSettings.height.toString());
-    _minLinesController = TextEditingController(text: widget.initialSettings.minLines.toString());
+    _widthController = TextEditingController(
+      text: widget.initialSettings.width.toString(),
+    );
+    _heightController = TextEditingController(
+      text: widget.initialSettings.height.toString(),
+    );
     _seedPoints = widget.initialSettings.seedPoints
         .map((e) => SeedPoint(fraction: e.fraction, pixels: e.pixels))
         .toList();
+    _minGradient = widget.initialSettings.minGradient;
+    _maxGradient = widget.initialSettings.maxGradient;
   }
 
   @override
   void dispose() {
     _widthController.dispose();
     _heightController.dispose();
-    _minLinesController.dispose();
     super.dispose();
   }
 
@@ -50,8 +55,9 @@ class _SettingsPageState extends State<SettingsPage> {
         bitNumber: _selectedBitNumber,
         width: int.parse(_widthController.text),
         height: int.parse(_heightController.text),
-        minLines: int.parse(_minLinesController.text),
         seedPoints: _seedPoints,
+        minGradient: _minGradient,
+        maxGradient: _maxGradient,
       );
 
       await widget.settingsService.saveSettings(newSettings);
@@ -79,9 +85,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
+      appBar: AppBar(title: const Text('Settings')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -94,12 +98,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   labelText: 'Bit Number (3-8)',
                   border: OutlineInputBorder(),
                 ),
-                items: List.generate(6, (index) => index + 3) // Generates 3, 4, 5, 6, 7, 8
-                    .map((bit) => DropdownMenuItem(
-                          value: bit,
-                          child: Text('$bit'),
-                        ))
-                    .toList(),
+                items:
+                    List.generate(
+                          6,
+                          (index) => index + 3,
+                        ) // Generates 3, 4, 5, 6, 7, 8
+                        .map(
+                          (bit) =>
+                              DropdownMenuItem(value: bit, child: Text('$bit')),
+                        )
+                        .toList(),
                 onChanged: (value) {
                   if (value != null) {
                     setState(() {
@@ -117,10 +125,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 keyboardType: TextInputType.number,
                 validator: (value) {
-                  if (value == null || value.isEmpty) return 'Please enter a width.';
+                  if (value == null || value.isEmpty)
+                    return 'Please enter a width.';
                   final n = int.tryParse(value);
                   if (n == null) return 'Please enter a valid number.';
-                  if (n < 1 || n > 2000) return 'Width must be between 1 and 2000.';
+                  if (n < 1 || n > 2000)
+                    return 'Width must be between 1 and 2000.';
                   return null;
                 },
               ),
@@ -133,27 +143,41 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 keyboardType: TextInputType.number,
                 validator: (value) {
-                  if (value == null || value.isEmpty) return 'Please enter a height.';
+                  if (value == null || value.isEmpty)
+                    return 'Please enter a height.';
                   final n = int.tryParse(value);
                   if (n == null) return 'Please enter a valid number.';
-                  if (n < 1 || n > 5000) return 'Height must be between 1 and 5000.';
+                  if (n < 1 || n > 5000)
+                    return 'Height must be between 1 and 5000.';
                   return null;
                 },
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _minLinesController,
-                decoration: const InputDecoration(
-                  labelText: 'Minimum Unique Lines (MinLines)',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'Please enter a minimum number of lines.';
-                  final n = int.tryParse(value);
-                  if (n == null) return 'Please enter a valid number.';
-                  if (n < 1) return 'Minimum lines must be at least 1.';
-                  return null;
+              Text('Minimum gradient (${_minGradient.toStringAsFixed(2)})'),
+              Slider(
+                min: 0.0,
+                max: 1.0,
+                divisions: 100,
+                value: _minGradient,
+                onChanged: (v) {
+                  setState(() {
+                    _minGradient = v;
+                    if (_minGradient > _maxGradient) _maxGradient = v;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              Text('Maximum gradient (${_maxGradient.toStringAsFixed(2)})'),
+              Slider(
+                min: 0.0,
+                max: 1.0,
+                divisions: 100,
+                value: _maxGradient,
+                onChanged: (v) {
+                  setState(() {
+                    _maxGradient = v;
+                    if (_maxGradient < _minGradient) _minGradient = v;
+                  });
                 },
               ),
               const SizedBox(height: 24),
@@ -178,10 +202,12 @@ class _SettingsPageState extends State<SettingsPage> {
                           isExpanded: true,
                           value: sp.pixels.clamp(1, 8),
                           items: List.generate(8, (i) => i + 1)
-                              .map((v) => DropdownMenuItem(
-                                    value: v,
-                                    child: Text('$v'),
-                                  ))
+                              .map(
+                                (v) => DropdownMenuItem(
+                                  value: v,
+                                  child: Text('$v'),
+                                ),
+                              )
                               .toList(),
                           onChanged: (val) {
                             if (val != null) {
