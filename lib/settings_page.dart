@@ -22,6 +22,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late TextEditingController _heightController;
   late int _selectedBitNumber;
   late List<SeedPoint> _seedPoints;
+  late double _minGradient;
+  late double _maxGradient;
 
   @override
   void initState() {
@@ -36,6 +38,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _seedPoints = widget.initialSettings.seedPoints
         .map((e) => SeedPoint(fraction: e.fraction, pixels: e.pixels))
         .toList();
+    _minGradient = widget.initialSettings.minGradient;
+    _maxGradient = widget.initialSettings.maxGradient;
   }
 
   @override
@@ -52,6 +56,8 @@ class _SettingsPageState extends State<SettingsPage> {
         width: int.parse(_widthController.text),
         height: int.parse(_heightController.text),
         seedPoints: _seedPoints,
+        minGradient: _minGradient,
+        maxGradient: _maxGradient,
       );
 
       await widget.settingsService.saveSettings(newSettings);
@@ -144,6 +150,34 @@ class _SettingsPageState extends State<SettingsPage> {
                   if (n < 1 || n > 5000)
                     return 'Height must be between 1 and 5000.';
                   return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              Text('Minimum gradient (${_minGradient.toStringAsFixed(2)})'),
+              Slider(
+                min: 0.0,
+                max: 1.0,
+                divisions: 100,
+                value: _minGradient,
+                onChanged: (v) {
+                  setState(() {
+                    _minGradient = v;
+                    if (_minGradient > _maxGradient) _maxGradient = v;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              Text('Maximum gradient (${_maxGradient.toStringAsFixed(2)})'),
+              Slider(
+                min: 0.0,
+                max: 1.0,
+                divisions: 100,
+                value: _maxGradient,
+                onChanged: (v) {
+                  setState(() {
+                    _maxGradient = v;
+                    if (_maxGradient < _minGradient) _minGradient = v;
+                  });
                 },
               ),
               const SizedBox(height: 24),

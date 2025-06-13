@@ -58,14 +58,14 @@ void main() {
     final lines = _generateLines(2, 3, cols, rows, seeds);
     final counts = getSortedPatternCounts(lines);
     final grad = calculateGradient(counts);
-    expect(passesGradientFilter(grad), isFalse);
+    expect(passesGradientFilter(grad, 0.1, 0.8), isFalse);
   });
 
   test('3-bit rule 30 passes gradient filter', () {
     final lines = _generateLines(30, 3, cols, rows, seeds);
     final counts = getSortedPatternCounts(lines);
     final grad = calculateGradient(counts);
-    expect(passesGradientFilter(grad), isTrue);
+    expect(passesGradientFilter(grad, 0.1, 0.8), isTrue);
   });
 }
 

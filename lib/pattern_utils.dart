@@ -61,7 +61,11 @@ double normalizedGradient(double gradient) {
 }
 
 /// Returns true if [gradient] falls within the middle 80% of the possible range.
-bool passesGradientFilter(double gradient) {
+bool passesGradientFilter(
+  double gradient,
+  double minNormalized,
+  double maxNormalized,
+) {
   final normalized = normalizedGradient(gradient);
-  return normalized > 0.12 && normalized < 0.88;
+  return normalized > minNormalized && normalized < maxNormalized;
 }

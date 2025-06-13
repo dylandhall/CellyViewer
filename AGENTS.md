@@ -18,7 +18,8 @@ Key components:
 Image filtering is based on the 3×3 pattern frequency distribution in the output
 lines. The frequencies are sorted and linear regression is performed on the
 sorted counts to get a gradient. The gradient is normalized with `atan` and
-rejected if the normalized value is below 0.1 or above 0.9.
+rules are rejected if the normalized value falls outside the user-configurable
+minimum and maximum thresholds (defaults 0.1–0.8).
 
 To debug image filtering, `_generateRawPixelData` prints a summary line with the
 rule index, number of patterns counted, the top counts, and the gradient.

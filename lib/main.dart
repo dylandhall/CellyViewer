@@ -587,6 +587,8 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         _currentSettings.width,
         _currentSettings.height,
         _currentSettings.seedPoints,
+        _currentSettings.minGradient,
+        _currentSettings.maxGradient,
       );
 
       final bool isSkipped = computeResult['isSkipped'] as bool;
@@ -803,6 +805,8 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     int cols,
     int rows,
     List<SeedPoint> seedPoints,
+    double minGradient,
+    double maxGradient,
   ) {
     // Bits for the rule
     final ruleBitsLength = 1 << pow;
@@ -875,11 +879,11 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     final counts = getSortedPatternCounts(lines);
     final gradient = calculateGradient(counts);
     final normalized = normalizedGradient(gradient);
-    final passes = passesGradientFilter(gradient);
+    final passes = passesGradientFilter(gradient, minGradient, maxGradient);
     if (kDebugMode) {
       final top = counts.take(5).join(',');
       print(
-          '[patternDebug] rule:$rule patterns:${counts.length} top:$top gradient:${gradient.toStringAsFixed(4)} normalized:${normalized.toStringAsFixed(4)} pass:$passes');
+          '[patternDebug] rule:$rule patterns:${counts.length} top:$top gradient:${gradient.toStringAsFixed(4)} normalized:${normalized.toStringAsFixed(4)} min:$minGradient max:$maxGradient pass:$passes');
     }
     if (!passes) {
       return {'isSkipped': true, 'pixelData': null};
