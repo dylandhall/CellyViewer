@@ -4,8 +4,8 @@ This repository contains a Flutter app for browsing cellular automata images.
 Key components:
 - `main.dart` – home of `CellularAutomataPage`, which renders images for rules.
   - `_generateRawPixelData` computes each image line by line.
-  - It uses `_getSortedPatternCounts`, `_calculateGradient`, and `_passesGradientFilter`
-    to filter out rules that appear too simple. If a rule fails the filter, a
+  - Filtering helpers live in `pattern_utils.dart` (`getSortedPatternCounts`,
+    `calculateGradient`, `passesGradientFilter`). If a rule fails the filter, a
     1x1 white image is stored instead.
   - Image generation occurs synchronously on the main thread; the final scaling
     to an image is done using Canvas.

@@ -12,10 +12,10 @@
 // 3) We do not remove or scroll away items that are still in flight.
 
 import 'dart:ui' as ui;
-import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:super_clipboard/super_clipboard.dart';
+import 'pattern_utils.dart';
 import 'settings_model.dart';
 import 'settings_service.dart';
 import 'settings_page.dart';
@@ -872,10 +872,10 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       line = newLine;
     }
 
-    final counts = _getSortedPatternCounts(lines);
-    final gradient = _calculateGradient(counts);
-    final normalized = _normalizedGradient(gradient);
-    final passes = _passesGradientFilter(gradient);
+    final counts = getSortedPatternCounts(lines);
+    final gradient = calculateGradient(counts);
+    final normalized = normalizedGradient(gradient);
+    final passes = passesGradientFilter(gradient);
     if (kDebugMode) {
       final top = counts.take(5).join(',');
       print(
@@ -916,57 +916,3 @@ Future<MemoryImage> _make1x1WhiteImage() async {
   return MemoryImage(Uint8List.view(pngBytes!.buffer));
 }
 
-List<int> _getSortedPatternCounts(List<List<bool>> lines) {
-  if (lines.length < 3 || lines[0].length < 3) {
-    return [];
-  }
-  final counts = List<int>.filled(512, 0);
-  final rows = lines.length;
-  final cols = lines[0].length;
-  for (int r = 0; r < rows - 2; r++) {
-    for (int c = 0; c < cols - 2; c++) {
-      int val = 0;
-      for (int dr = 0; dr < 3; dr++) {
-        for (int dc = 0; dc < 3; dc++) {
-          if (lines[r + dr][c + dc]) {
-            val |= 1 << (dr * 3 + dc);
-          }
-        }
-      }
-      counts[val]++;
-    }
-  }
-  final sorted = counts.where((c) => c > 0).toList()
-    ..sort((a, b) => b.compareTo(a));
-  return sorted;
-}
-
-double _calculateGradient(List<int> sortedCounts) {
-  if (sortedCounts.isEmpty) return 0;
-  final n = sortedCounts.length;
-  double sumX = 0;
-  double sumY = 0;
-  double sumXY = 0;
-  double sumX2 = 0;
-  for (int i = 0; i < n; i++) {
-    final x = i.toDouble();
-    final y = sortedCounts[i].toDouble();
-    sumX += x;
-    sumY += y;
-    sumXY += x * y;
-    sumX2 += x * x;
-  }
-  final numerator = n * sumXY - sumX * sumY;
-  final denominator = n * sumX2 - sumX * sumX;
-  if (denominator == 0) return 0;
-  return numerator / denominator;
-}
-
-bool _passesGradientFilter(double gradient) {
-  final normalized = _normalizedGradient(gradient);
-  return normalized > 0.1 && normalized < 0.9;
-}
-
-double _normalizedGradient(double gradient) {
-  return (2 / math.pi) * math.atan(gradient.abs());
-}
