@@ -21,5 +21,17 @@ sorted counts to get a gradient. The gradient is normalized with `atan` and
 rules are rejected if the normalized value falls outside the user-configurable
 minimum and maximum thresholds (defaults 0.1–0.8).
 
+## Development Notes
+
+- The image list uses `_DisplayEntry` objects. Rendered images are `_ImageEntry`
+  instances, while skipped sequences are stored as a single `_SkippedEntry`
+  containing a count of skipped items.
+- A `_generationToken` increments whenever the list is reset. Results from
+  previous generations are ignored if their token does not match the current
+  one.
+- Scroll events only queue more images when no generation tasks are currently
+  running to avoid runaway loops.
+- Always run `flutter test` before committing changes.
+
 To debug image filtering, `_generateRawPixelData` prints a summary line with the
 rule index, number of patterns counted, the top counts, and the gradient.

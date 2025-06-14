@@ -53,11 +53,9 @@ class _ImageEntry extends _DisplayEntry {
 }
 
 class _SkippedEntry extends _DisplayEntry {
-  final List<int> rules;
-  _SkippedEntry(this.rules);
-  int get count => rules.length;
-  void add(int rule) => rules.add(rule);
-  void remove(int rule) => rules.remove(rule);
+  int count;
+  _SkippedEntry(this.count);
+  void increment() => count++;
 }
 
 class CellularAutomataPage extends StatefulWidget {
@@ -92,6 +90,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
 
   final List<_DisplayEntry> _displayItems = [];
   int _nextRuleOffset = 0;
+  int _generationToken = 0;
 
   @override
   void initState() {
@@ -128,6 +127,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       _isLoadingSettings = false;
       // Potentially call _resetListViewAndScroll here if initial view depends heavily on settings
       // For now, we'll let the initial build use defaults then refresh if settings change.
+      _generationToken++;
     });
     _maybeStartGeneration();
   }
@@ -173,6 +173,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
           _scrollController.jumpTo(0.0);
         }
       });
+      _generationToken++;
     });
     _maybeStartGeneration();
   }
@@ -199,12 +200,6 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       final entry = _displayItems[i];
       if (entry is _ImageEntry && entry.rule == rule) {
         _displayItems.removeAt(i);
-        break;
-      } else if (entry is _SkippedEntry && entry.rules.contains(rule)) {
-        entry.remove(rule);
-        if (entry.rules.isEmpty) {
-          _displayItems.removeAt(i);
-        }
         break;
       }
     }
@@ -439,7 +434,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
             final metrics = scrollNotification.metrics;
             // If we are near the bottom and concurrency is not maxed, expand visible range
             if (metrics.pixels >= (metrics.maxScrollExtent - 10)) {
-              if (_generatingRules.length < _concurrencyLimit) {
+              if (_generatingRules.isEmpty) {
                 setState(() {
                   final BigInt currentMaxRules =
                       BigInt.one << (1 << _currentSettings.bitNumber);
@@ -597,6 +592,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     if (kDebugMode) {
       print('[_startGenerating] Called for ruleIndex: $ruleIndex');
     }
+    final int token = _generationToken;
     setState(() {
       _generatingRules.add(ruleIndex);
     });
@@ -617,7 +613,14 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       final bool isSkipped = computeResult['isSkipped'] as bool;
       final Uint8List? pixelData = computeResult['pixelData'] as Uint8List?;
 
-      if (!mounted) return;
+      if (!mounted || token != _generationToken) {
+        if (mounted) {
+          setState(() {
+            _generatingRules.remove(ruleIndex);
+          });
+        }
+        return;
+      }
 
       // 2) If we gave up due to too few lines, store 1x1 white
       if (isSkipped || pixelData == null) {
@@ -627,7 +630,9 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
           );
         }
         final skipImage = await _make1x1WhiteImage();
-        _storeResult(ruleIndex, _GeneratedImage(skipImage, isSkipped: true));
+        if (token == _generationToken) {
+          _storeResult(ruleIndex, _GeneratedImage(skipImage, isSkipped: true));
+        }
         return;
       }
 
@@ -641,7 +646,9 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         _currentSettings.width,
         _currentSettings.height,
       );
-      _storeResult(ruleIndex, _GeneratedImage(scaledImage, isSkipped: false));
+      if (token == _generationToken) {
+        _storeResult(ruleIndex, _GeneratedImage(scaledImage, isSkipped: false));
+      }
       if (kDebugMode) {
         print('[_startGenerating] Stored scaled image for rule $ruleIndex.');
       }
@@ -652,15 +659,15 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         );
         print(stackTrace);
       }
-      if (mounted) {
+      if (mounted && token == _generationToken) {
         setState(() {
           _generatingRules.remove(ruleIndex);
-          // Optionally, add a placeholder error image to _generatedCache here
-          // For now, just ensure the rule is removed from generating.
         });
       }
     }
-    _maybeStartGeneration();
+    if (token == _generationToken) {
+      _maybeStartGeneration();
+    }
   }
 
   void _storeResult(int ruleIndex, _GeneratedImage image) {
@@ -688,9 +695,9 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
 
       if (image.isSkipped) {
         if (_displayItems.isNotEmpty && _displayItems.last is _SkippedEntry) {
-          (_displayItems.last as _SkippedEntry).add(ruleIndex);
+          (_displayItems.last as _SkippedEntry).increment();
         } else {
-          _displayItems.add(_SkippedEntry([ruleIndex]));
+          _displayItems.add(_SkippedEntry(1));
         }
       } else {
         _displayItems.add(_ImageEntry(ruleIndex, image.image));
