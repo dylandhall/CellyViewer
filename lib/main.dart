@@ -44,6 +44,25 @@ class _GeneratedImage {
   const _GeneratedImage(this.image, {this.isSkipped = false});
 }
 
+abstract class _DisplayEntry {}
+
+class _ImageEntry extends _DisplayEntry {
+  final int rule;
+  final MemoryImage image;
+  _ImageEntry(this.rule, this.image);
+}
+
+class _GeneratingEntry extends _DisplayEntry {
+  final int rule;
+  _GeneratingEntry(this.rule);
+}
+
+class _SkippedEntry extends _DisplayEntry {
+  int count;
+  _SkippedEntry(this.count);
+  void increment() => count++;
+}
+
 class CellularAutomataPage extends StatefulWidget {
   const CellularAutomataPage({super.key}); // pow removed from constructor
 
@@ -73,6 +92,12 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
   late AppSettings _currentSettings;
   final SettingsService _settingsService = SettingsService();
   bool _isLoadingSettings = true; // To show a loader initially
+
+  final List<_DisplayEntry> _displayItems = [];
+  int _nextRuleOffset = 0;
+  int _generationToken = 0;
+  DateTime _lastModificationTime =
+      DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -109,7 +134,10 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       _isLoadingSettings = false;
       // Potentially call _resetListViewAndScroll here if initial view depends heavily on settings
       // For now, we'll let the initial build use defaults then refresh if settings change.
+      _generationToken++;
+      _lastModificationTime = DateTime.now();
     });
+    _maybeStartGeneration();
   }
 
   // Helper function to reset list state and scroll to top
@@ -122,6 +150,8 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     setState(() {
       _generatedCache.clear();
       _generatingRules.clear();
+      _displayItems.clear();
+      _nextRuleOffset = 0;
       if (newStartingRule != null) {
         // Clamp _currentStartingRule against a practical int max, or maxRulesBigInt if it fits in int.
         int maxClampValue =
@@ -151,7 +181,72 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
           _scrollController.jumpTo(0.0);
         }
       });
+      _generationToken++;
+      _lastModificationTime = DateTime.now();
     });
+    _maybeStartGeneration();
+  }
+
+  void _maybeStartGeneration() {
+    final BigInt maxRulesBigInt =
+        BigInt.one << (1 << _currentSettings.bitNumber);
+    while (_generatingRules.length < _concurrencyLimit &&
+        (_displayItems.whereType<_ImageEntry>().length +
+                _generatingRules.length) <
+            _numberOfVisibleItems) {
+      final int ruleIndex =
+          _currentStartingRule + (_nextRuleOffset * _currentJumpAmount);
+      if (BigInt.from(ruleIndex) >= maxRulesBigInt) {
+        break;
+      }
+      _nextRuleOffset++;
+      setState(() {
+        _generatingRules.add(ruleIndex);
+        _displayItems.add(_GeneratingEntry(ruleIndex));
+        _lastModificationTime = DateTime.now();
+      });
+      _startGenerating(ruleIndex);
+    }
+  }
+
+  void _removeDisplayForRule(int rule) {
+    int? removeIndex;
+    for (int i = 0; i < _displayItems.length; i++) {
+      final entry = _displayItems[i];
+      if ((entry is _ImageEntry && entry.rule == rule) ||
+          (entry is _GeneratingEntry && entry.rule == rule)) {
+        removeIndex = i;
+        break;
+      }
+    }
+    if (removeIndex != null) {
+      _displayItems.removeAt(removeIndex!);
+      if (removeIndex == 0 && _scrollController.hasClients) {
+        final newOffset =
+            (_scrollController.offset - 220).clamp(0.0, _scrollController.position.maxScrollExtent);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollController.jumpTo(newOffset);
+          }
+        });
+      }
+    }
+    // Remove skipped entries that no longer have images on either side
+    while (_displayItems.isNotEmpty &&
+        _displayItems.first is _SkippedEntry &&
+        (_displayItems.length == 1 ||
+            !(_displayItems[1] is _ImageEntry ||
+                _displayItems[1] is _GeneratingEntry))) {
+      _displayItems.removeAt(0);
+    }
+    while (_displayItems.isNotEmpty &&
+        _displayItems.last is _SkippedEntry &&
+        (_displayItems.length == 1 ||
+            !(_displayItems[_displayItems.length - 2] is _ImageEntry ||
+                _displayItems[_displayItems.length - 2] is _GeneratingEntry))) {
+      _displayItems.removeLast();
+    }
+    _lastModificationTime = DateTime.now();
   }
 
   void _processInputsAndReset() {
@@ -367,11 +462,17 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       ),
       body: NotificationListener<ScrollNotification>(
         onNotification: (scrollNotification) {
+          if (DateTime.now()
+                  .difference(_lastModificationTime)
+                  .inMilliseconds <
+              1000) {
+            return false;
+          }
           if (scrollNotification is ScrollEndNotification) {
             final metrics = scrollNotification.metrics;
             // If we are near the bottom and concurrency is not maxed, expand visible range
             if (metrics.pixels >= (metrics.maxScrollExtent - 10)) {
-              if (_generatingRules.length < _concurrencyLimit) {
+              if (_generatingRules.isEmpty) {
                 setState(() {
                   final BigInt currentMaxRules =
                       BigInt.one << (1 << _currentSettings.bitNumber);
@@ -401,6 +502,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                     }
                   }
                 });
+                _maybeStartGeneration();
               }
             }
           }
@@ -408,162 +510,121 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         },
         child: ListView.builder(
           controller: _scrollController,
-          itemCount: _numberOfVisibleItems, // Simplified itemCount
+          itemCount:
+              _displayItems.length +
+              ((_generatingRules.isNotEmpty ||
+                          (_displayItems.whereType<_ImageEntry>().length +
+                                  _generatingRules.length) <
+                              _numberOfVisibleItems) &&
+                      BigInt.from(
+                            _currentStartingRule +
+                                (_nextRuleOffset * _currentJumpAmount),
+                          ) <
+                          (BigInt.one << (1 << _currentSettings.bitNumber))
+                  ? 1
+                  : 0),
           itemBuilder: (context, index) {
-            final actualRuleIndex =
-                _currentStartingRule + (index * _currentJumpAmount);
-
-            // maxRulesBigInt is defined in the build method's outer scope
-            if (BigInt.from(actualRuleIndex) >= maxRulesBigInt) {
-              return const SizedBox.shrink();
-            }
-
-            // If we've completed the image:
-            if (_generatedCache.containsKey(actualRuleIndex)) {
-              final gen = _generatedCache[actualRuleIndex]!;
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Column(
-                  children: [
-                    Center(
-                      // Center the Row containing Text and IconButton
-                      child: Row(
-                        mainAxisSize: MainAxisSize
-                            .min, // Row takes minimum space needed by children
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            gen.isSkipped
-                                ? 'Image $actualRuleIndex - Skipped (too simple)'
-                                : 'Image $actualRuleIndex',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          if (!gen
-                              .isSkipped) // Only show copy button if there's an image
-                            Padding(
-                              // Add a little padding to the left of the icon
-                              padding: const EdgeInsets.only(left: 8.0),
-                              child: IconButton(
-                                icon: const Icon(Icons.content_copy),
-                                constraints:
-                                    const BoxConstraints(), // Remove default IconButton padding
-                                padding: EdgeInsets
-                                    .zero, // Remove default IconButton padding
-                                tooltip: 'Copy Image to Clipboard',
-                                visualDensity: VisualDensity
-                                    .compact, // Make it more compact
-                                iconSize: 20, // Adjust icon size if needed
-                                onPressed: () async {
-                                  final bytes = gen.image.bytes;
-                                  if (kDebugMode) {
-                                    print(
-                                      'Attempting to copy image for Rule $actualRuleIndex, byte length: ${bytes.length}',
-                                    );
-                                  }
-
-                                  SystemClipboard? clipboard;
-                                  try {
-                                    clipboard = SystemClipboard.instance;
-                                  } catch (e) {
-                                    if (kDebugMode) {
-                                      print(
-                                        'Can\'t get systemp clipboard instance, error: $e',
-                                      );
-                                    }
-
-                                    clipboard = null;
-                                  }
-                                  if (clipboard == null) {
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Clipboard API not available on this platform.',
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                    return;
-                                  }
-
-                                  final item = DataWriterItem();
-                                  // Add PNG representation using the Formats class.
-                                  // Formats.png is a pre-defined DataFormat<Uint8List>.
-                                  // Calling it with the bytes will produce the EncodedData.
-                                  item.add(Formats.png(bytes));
-
-                                  // Example of adding a text fallback:
-                                  // item.add(super_clipboard.Formats.plainText('Cellular Automaton Image - Rule $actualRuleIndex'));
-
-                                  try {
-                                    await clipboard.write([item]);
-                                  } catch (e) {
-                                    if (kDebugMode) {
-                                      print('Error copying to clipboard: $e');
-                                    }
-                                    if (!mounted) return;
-                                    // ignore: use_build_context_synchronously
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Failed to copy image: $e',
-                                        ),
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  if (!mounted) return;
-                                  // ignore: use_build_context_synchronously
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Image for Rule $actualRuleIndex copied!',
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    if (!gen.isSkipped) Center(child: Image(image: gen.image)),
-                  ],
-                ),
-              );
-            }
-
-            // If it is still generating:
-            if (_generatingRules.contains(actualRuleIndex)) {
+            if (index >= _displayItems.length) {
               return const SizedBox(
                 height: 200,
                 child: Center(child: CircularProgressIndicator()),
               );
             }
 
-            // If we have concurrency space, schedule generating for after the build:
-            if (_generatingRules.length < _concurrencyLimit &&
-                !_generatingRules.contains(actualRuleIndex) &&
-                !_generatedCache.containsKey(actualRuleIndex)) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                // Check again if still mounted and if the rule is still needed,
-                // as the state might have changed by the time this callback runs.
-                if (mounted &&
-                    !_generatingRules.contains(actualRuleIndex) &&
-                    !_generatedCache.containsKey(actualRuleIndex)) {
-                  _startGenerating(actualRuleIndex);
-                }
-              });
+            final entry = _displayItems[index];
+            if (entry is _ImageEntry) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  children: [
+                    Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Image ${entry.rule}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8.0),
+                            child: IconButton(
+                              icon: const Icon(Icons.content_copy),
+                              constraints: const BoxConstraints(),
+                              padding: EdgeInsets.zero,
+                              tooltip: 'Copy Image to Clipboard',
+                              visualDensity: VisualDensity.compact,
+                              iconSize: 20,
+                              onPressed: () async {
+                                final bytes = entry.image.bytes;
+                                SystemClipboard? clipboard;
+                                try {
+                                  clipboard = SystemClipboard.instance;
+                                } catch (e) {
+                                  clipboard = null;
+                                }
+                                if (clipboard == null) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Clipboard API not available on this platform.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return;
+                                }
+                                final item = DataWriterItem();
+                                item.add(Formats.png(bytes));
+                                try {
+                                  await clipboard.write([item]);
+                                } catch (e) {
+                                  if (!mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Failed to copy image: $e'),
+                                    ),
+                                  );
+                                  return;
+                                }
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Image for Rule ${entry.rule} copied!',
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Center(child: Image(image: entry.image)),
+                  ],
+                ),
+              );
+            } else if (entry is _SkippedEntry) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Center(
+                  child: Text(
+                    entry.count == 1
+                        ? '1 image was too simple to display'
+                        : '${entry.count} images were too simple to display',
+                  ),
+                ),
+              );
+            } else if (entry is _GeneratingEntry) {
+              return const SizedBox(
+                height: 200,
+                child: Center(child: CircularProgressIndicator()),
+              );
             }
-
-            // Display spinner while awaiting generation:
-            return const SizedBox(
-              height: 200,
-              child: Center(child: CircularProgressIndicator()),
-            );
+            return const SizedBox.shrink();
           },
         ),
       ),
@@ -574,9 +635,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     if (kDebugMode) {
       print('[_startGenerating] Called for ruleIndex: $ruleIndex');
     }
-    setState(() {
-      _generatingRules.add(ruleIndex);
-    });
+    final int token = _generationToken;
 
     try {
       // Re-enabled original logic:
@@ -594,7 +653,14 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       final bool isSkipped = computeResult['isSkipped'] as bool;
       final Uint8List? pixelData = computeResult['pixelData'] as Uint8List?;
 
-      if (!mounted) return;
+      if (!mounted || token != _generationToken) {
+        if (mounted) {
+          setState(() {
+            _generatingRules.remove(ruleIndex);
+          });
+        }
+        return;
+      }
 
       // 2) If we gave up due to too few lines, store 1x1 white
       if (isSkipped || pixelData == null) {
@@ -604,7 +670,9 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
           );
         }
         final skipImage = await _make1x1WhiteImage();
-        _storeResult(ruleIndex, _GeneratedImage(skipImage, isSkipped: true));
+        if (token == _generationToken) {
+          _storeResult(ruleIndex, _GeneratedImage(skipImage, isSkipped: true));
+        }
         return;
       }
 
@@ -618,7 +686,9 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         _currentSettings.width,
         _currentSettings.height,
       );
-      _storeResult(ruleIndex, _GeneratedImage(scaledImage, isSkipped: false));
+      if (token == _generationToken) {
+        _storeResult(ruleIndex, _GeneratedImage(scaledImage, isSkipped: false));
+      }
       if (kDebugMode) {
         print('[_startGenerating] Stored scaled image for rule $ruleIndex.');
       }
@@ -629,13 +699,14 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         );
         print(stackTrace);
       }
-      if (mounted) {
+      if (mounted && token == _generationToken) {
         setState(() {
           _generatingRules.remove(ruleIndex);
-          // Optionally, add a placeholder error image to _generatedCache here
-          // For now, just ensure the rule is removed from generating.
         });
       }
+    }
+    if (token == _generationToken) {
+      _maybeStartGeneration();
     }
   }
 
@@ -661,6 +732,37 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
           '[_storeResult] Removed $ruleIndex from _generatingRules. Current _generatingRules: $_generatingRules',
         );
       }
+
+      int placeholderIndex = _displayItems.indexWhere(
+          (e) => e is _GeneratingEntry && e.rule == ruleIndex);
+      if (placeholderIndex == -1) {
+        placeholderIndex = _displayItems.length;
+      } else {
+        _displayItems.removeAt(placeholderIndex);
+      }
+
+      if (image.isSkipped) {
+        bool merged = false;
+        if (placeholderIndex > 0 &&
+            _displayItems[placeholderIndex - 1] is _SkippedEntry) {
+          (_displayItems[placeholderIndex - 1] as _SkippedEntry).increment();
+          merged = true;
+          placeholderIndex--;
+        }
+        if (!merged &&
+            placeholderIndex < _displayItems.length &&
+            _displayItems[placeholderIndex] is _SkippedEntry) {
+          (_displayItems[placeholderIndex] as _SkippedEntry).increment();
+          merged = true;
+        }
+        if (!merged) {
+          _displayItems.insert(placeholderIndex, _SkippedEntry(1));
+        }
+      } else {
+        _displayItems.insert(
+            placeholderIndex, _ImageEntry(ruleIndex, image.image));
+      }
+      _lastModificationTime = DateTime.now();
 
       // Eviction logic
       if (!image.isSkipped) {
@@ -688,6 +790,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
           }
           if (keyToRemove != null) {
             _generatedCache.remove(keyToRemove);
+            _removeDisplayForRule(keyToRemove);
             if (kDebugMode) {
               print(
                 '[_storeResult] Evicted actual image for rule $keyToRemove to make space for new actual image $ruleIndex.',
@@ -726,6 +829,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
 
         if (keyToRemove != null) {
           _generatedCache.remove(keyToRemove);
+          _removeDisplayForRule(keyToRemove);
           if (kDebugMode) {
             print(
               '[_storeResult] Evicted oldest item (rule $keyToRemove) due to total cache size limit.',
@@ -752,6 +856,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         );
       }
     });
+    _maybeStartGeneration();
   }
 
   // Final scaling by 2x on main thread
@@ -883,7 +988,8 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
     if (kDebugMode) {
       final top = counts.take(5).join(',');
       print(
-          '[patternDebug] rule:$rule patterns:${counts.length} top:$top gradient:${gradient.toStringAsFixed(4)} normalized:${normalized.toStringAsFixed(4)} min:$minGradient max:$maxGradient pass:$passes');
+        '[patternDebug] rule:$rule patterns:${counts.length} top:$top gradient:${gradient.toStringAsFixed(4)} normalized:${normalized.toStringAsFixed(4)} min:$minGradient max:$maxGradient pass:$passes',
+      );
     }
     if (!passes) {
       return {'isSkipped': true, 'pixelData': null};
@@ -919,4 +1025,3 @@ Future<MemoryImage> _make1x1WhiteImage() async {
   );
   return MemoryImage(Uint8List.view(pngBytes!.buffer));
 }
-
