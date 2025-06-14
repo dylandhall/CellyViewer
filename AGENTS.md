@@ -26,11 +26,16 @@ minimum and maximum thresholds (defaults 0.1–0.8).
 - The image list uses `_DisplayEntry` objects. Rendered images are `_ImageEntry`
   instances, while skipped sequences are stored as a single `_SkippedEntry`
   containing a count of skipped items.
+- Generating rules insert a `_GeneratingEntry` placeholder which is replaced
+  when generation completes. This keeps items ordered even if tasks finish out of
+  sequence.
 - A `_generationToken` increments whenever the list is reset. Results from
   previous generations are ignored if their token does not match the current
   one.
 - Scroll events only queue more images when no generation tasks are currently
   running to avoid runaway loops.
+- Scroll processing is debounced for one second after list modifications to
+  prevent runaway generation when items are evicted.
 - Always run `flutter test` before committing changes.
 
 To debug image filtering, `_generateRawPixelData` prints a summary line with the

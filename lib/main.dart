@@ -52,6 +52,11 @@ class _ImageEntry extends _DisplayEntry {
   _ImageEntry(this.rule, this.image);
 }
 
+class _GeneratingEntry extends _DisplayEntry {
+  final int rule;
+  _GeneratingEntry(this.rule);
+}
+
 class _SkippedEntry extends _DisplayEntry {
   int count;
   _SkippedEntry(this.count);
@@ -91,6 +96,8 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
   final List<_DisplayEntry> _displayItems = [];
   int _nextRuleOffset = 0;
   int _generationToken = 0;
+  DateTime _lastModificationTime =
+      DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -128,6 +135,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       // Potentially call _resetListViewAndScroll here if initial view depends heavily on settings
       // For now, we'll let the initial build use defaults then refresh if settings change.
       _generationToken++;
+      _lastModificationTime = DateTime.now();
     });
     _maybeStartGeneration();
   }
@@ -174,6 +182,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         }
       });
       _generationToken++;
+      _lastModificationTime = DateTime.now();
     });
     _maybeStartGeneration();
   }
@@ -191,30 +200,53 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         break;
       }
       _nextRuleOffset++;
+      setState(() {
+        _generatingRules.add(ruleIndex);
+        _displayItems.add(_GeneratingEntry(ruleIndex));
+        _lastModificationTime = DateTime.now();
+      });
       _startGenerating(ruleIndex);
     }
   }
 
   void _removeDisplayForRule(int rule) {
+    int? removeIndex;
     for (int i = 0; i < _displayItems.length; i++) {
       final entry = _displayItems[i];
-      if (entry is _ImageEntry && entry.rule == rule) {
-        _displayItems.removeAt(i);
+      if ((entry is _ImageEntry && entry.rule == rule) ||
+          (entry is _GeneratingEntry && entry.rule == rule)) {
+        removeIndex = i;
         break;
+      }
+    }
+    if (removeIndex != null) {
+      _displayItems.removeAt(removeIndex!);
+      if (removeIndex == 0 && _scrollController.hasClients) {
+        final newOffset =
+            (_scrollController.offset - 220).clamp(0.0, _scrollController.position.maxScrollExtent);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollController.jumpTo(newOffset);
+          }
+        });
       }
     }
     // Remove skipped entries that no longer have images on either side
     while (_displayItems.isNotEmpty &&
         _displayItems.first is _SkippedEntry &&
-        (_displayItems.length == 1 || _displayItems[1] is _SkippedEntry)) {
+        (_displayItems.length == 1 ||
+            !(_displayItems[1] is _ImageEntry ||
+                _displayItems[1] is _GeneratingEntry))) {
       _displayItems.removeAt(0);
     }
     while (_displayItems.isNotEmpty &&
         _displayItems.last is _SkippedEntry &&
         (_displayItems.length == 1 ||
-            _displayItems[_displayItems.length - 2] is _SkippedEntry)) {
+            !(_displayItems[_displayItems.length - 2] is _ImageEntry ||
+                _displayItems[_displayItems.length - 2] is _GeneratingEntry))) {
       _displayItems.removeLast();
     }
+    _lastModificationTime = DateTime.now();
   }
 
   void _processInputsAndReset() {
@@ -430,6 +462,12 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       ),
       body: NotificationListener<ScrollNotification>(
         onNotification: (scrollNotification) {
+          if (DateTime.now()
+                  .difference(_lastModificationTime)
+                  .inMilliseconds <
+              1000) {
+            return false;
+          }
           if (scrollNotification is ScrollEndNotification) {
             final metrics = scrollNotification.metrics;
             // If we are near the bottom and concurrency is not maxed, expand visible range
@@ -580,6 +618,11 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                   ),
                 ),
               );
+            } else if (entry is _GeneratingEntry) {
+              return const SizedBox(
+                height: 200,
+                child: Center(child: CircularProgressIndicator()),
+              );
             }
             return const SizedBox.shrink();
           },
@@ -593,9 +636,6 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       print('[_startGenerating] Called for ruleIndex: $ruleIndex');
     }
     final int token = _generationToken;
-    setState(() {
-      _generatingRules.add(ruleIndex);
-    });
 
     try {
       // Re-enabled original logic:
@@ -693,15 +733,36 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         );
       }
 
+      int placeholderIndex = _displayItems.indexWhere(
+          (e) => e is _GeneratingEntry && e.rule == ruleIndex);
+      if (placeholderIndex == -1) {
+        placeholderIndex = _displayItems.length;
+      } else {
+        _displayItems.removeAt(placeholderIndex);
+      }
+
       if (image.isSkipped) {
-        if (_displayItems.isNotEmpty && _displayItems.last is _SkippedEntry) {
-          (_displayItems.last as _SkippedEntry).increment();
-        } else {
-          _displayItems.add(_SkippedEntry(1));
+        bool merged = false;
+        if (placeholderIndex > 0 &&
+            _displayItems[placeholderIndex - 1] is _SkippedEntry) {
+          (_displayItems[placeholderIndex - 1] as _SkippedEntry).increment();
+          merged = true;
+          placeholderIndex--;
+        }
+        if (!merged &&
+            placeholderIndex < _displayItems.length &&
+            _displayItems[placeholderIndex] is _SkippedEntry) {
+          (_displayItems[placeholderIndex] as _SkippedEntry).increment();
+          merged = true;
+        }
+        if (!merged) {
+          _displayItems.insert(placeholderIndex, _SkippedEntry(1));
         }
       } else {
-        _displayItems.add(_ImageEntry(ruleIndex, image.image));
+        _displayItems.insert(
+            placeholderIndex, _ImageEntry(ruleIndex, image.image));
       }
+      _lastModificationTime = DateTime.now();
 
       // Eviction logic
       if (!image.isSkipped) {
