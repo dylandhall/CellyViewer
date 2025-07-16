@@ -144,7 +144,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
         _jumpByController.text = _currentJumpAmount
             .toString(); // Update text field if changed programmatically
       }
-      _numberOfVisibleItems = 20; // Reset to a default page size
+      _targetRuleCount = 20; // Reset to a default page size
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _scrollController.hasClients) {
@@ -414,7 +414,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
                                 onPressed: () async {
                                   final bytes = gen.image.bytes;
                                   try {
-                                    await SystemClipboard.instance.write([
+                                    await SystemClipboard.instance!.write([
                                       DataWriterItem()..add(Formats.png(bytes))
                                     ]);
                                     if (mounted) {
