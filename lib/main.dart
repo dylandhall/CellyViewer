@@ -61,7 +61,7 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
       40; // Max total items (actual + skipped placeholders)
 
   int _currentStartingRule = 0;
-  int _numberOfVisibleItems = 20;
+  int _targetRuleCount = 20;
   int _currentJumpAmount = 1;
 
   late TextEditingController _ruleInputController;
