@@ -365,207 +365,115 @@ class _CellularAutomataPageState extends State<CellularAutomataPage> {
           ),
         ],
       ),
-      body: NotificationListener<ScrollNotification>(
-        onNotification: (scrollNotification) {
-          if (scrollNotification is ScrollEndNotification) {
-            final metrics = scrollNotification.metrics;
-            // If we are near the bottom and concurrency is not maxed, expand visible range
-            if (metrics.pixels >= (metrics.maxScrollExtent - 10)) {
-              if (_generatingRules.length < _concurrencyLimit) {
-                setState(() {
-                  final BigInt currentMaxRules =
-                      BigInt.one << (1 << _currentSettings.bitNumber);
-                  BigInt totalPossibleItemsCalculated = BigInt.zero;
 
-                  if (_currentJumpAmount > 0) {
-                    totalPossibleItemsCalculated =
-                        (currentMaxRules -
-                            BigInt.from(_currentStartingRule) +
-                            BigInt.from(_currentJumpAmount) -
-                            BigInt.one) ~/
-                        BigInt.from(_currentJumpAmount);
-                  }
-                  if (totalPossibleItemsCalculated < BigInt.zero) {
-                    totalPossibleItemsCalculated = BigInt.zero;
-                  }
-
-                  if (BigInt.from(_numberOfVisibleItems) <
-                      totalPossibleItemsCalculated) {
-                    _numberOfVisibleItems += 10;
-                    if (totalPossibleItemsCalculated.isValidInt) {
-                      int totalPossibleInt = totalPossibleItemsCalculated
-                          .toInt();
-                      if (_numberOfVisibleItems > totalPossibleInt) {
-                        _numberOfVisibleItems = totalPossibleInt;
-                      }
-                    }
-                  }
-                });
-              }
-            }
-          }
-          return false;
-        },
-        child: ListView.builder(
-          controller: _scrollController,
-          itemCount: _numberOfVisibleItems, // Simplified itemCount
-          itemBuilder: (context, index) {
-            final actualRuleIndex =
-                _currentStartingRule + (index * _currentJumpAmount);
-
-            // maxRulesBigInt is defined in the build method's outer scope
-            if (BigInt.from(actualRuleIndex) >= maxRulesBigInt) {
-              return const SizedBox.shrink();
-            }
-
-            // If we've completed the image:
-            if (_generatedCache.containsKey(actualRuleIndex)) {
-              final gen = _generatedCache[actualRuleIndex]!;
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Column(
-                  children: [
-                    Center(
-                      // Center the Row containing Text and IconButton
-                      child: Row(
-                        mainAxisSize: MainAxisSize
-                            .min, // Row takes minimum space needed by children
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            gen.isSkipped
-                                ? 'Image $actualRuleIndex - Skipped (too simple)'
-                                : 'Image $actualRuleIndex',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          if (!gen
-                              .isSkipped) // Only show copy button if there's an image
+      body: Builder(
+        builder: (context) {
+          final BigInt maxRules = BigInt.one << (1 << _currentSettings.bitNumber);
+          final List<Widget> rows = [];
+          int ruleIndex = _currentStartingRule;
+          // Build contiguous processed items
+          while (BigInt.from(ruleIndex) < maxRules) {
+            if (_generatedCache.containsKey(ruleIndex)) {
+              final gen = _generatedCache[ruleIndex]!;
+              if (gen.isSkipped) {
+                int skippedCount = 1;
+                int nextRule = ruleIndex + _currentJumpAmount;
+                while (BigInt.from(nextRule) < maxRules &&
+                    _generatedCache.containsKey(nextRule) &&
+                    _generatedCache[nextRule]!.isSkipped) {
+                  skippedCount++;
+                  nextRule += _currentJumpAmount;
+                }
+                rows.add(Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    '$skippedCount image${skippedCount > 1 ? 's' : ''} were too simple to display',
+                    style: const TextStyle(fontStyle: FontStyle.italic),
+                  ),
+                ));
+                ruleIndex = nextRule;
+                continue;
+              } else {
+                rows.add(Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    children: [
+                      Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Image $ruleIndex',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
                             Padding(
-                              // Add a little padding to the left of the icon
                               padding: const EdgeInsets.only(left: 8.0),
                               child: IconButton(
                                 icon: const Icon(Icons.content_copy),
-                                constraints:
-                                    const BoxConstraints(), // Remove default IconButton padding
-                                padding: EdgeInsets
-                                    .zero, // Remove default IconButton padding
                                 tooltip: 'Copy Image to Clipboard',
-                                visualDensity: VisualDensity
-                                    .compact, // Make it more compact
-                                iconSize: 20, // Adjust icon size if needed
                                 onPressed: () async {
                                   final bytes = gen.image.bytes;
-                                  if (kDebugMode) {
-                                    print(
-                                      'Attempting to copy image for Rule $actualRuleIndex, byte length: ${bytes.length}',
-                                    );
-                                  }
-
-                                  SystemClipboard? clipboard;
                                   try {
-                                    clipboard = SystemClipboard.instance;
-                                  } catch (e) {
-                                    if (kDebugMode) {
-                                      print(
-                                        'Can\'t get systemp clipboard instance, error: $e',
-                                      );
-                                    }
-
-                                    clipboard = null;
-                                  }
-                                  if (clipboard == null) {
+                                    await SystemClipboard.instance.write([
+                                      DataWriterItem()..add(Formats.png(bytes))
+                                    ]);
                                     if (mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Clipboard API not available on this platform.',
-                                          ),
-                                        ),
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Image for Rule $ruleIndex copied!'))
                                       );
                                     }
-                                    return;
-                                  }
-
-                                  final item = DataWriterItem();
-                                  // Add PNG representation using the Formats class.
-                                  // Formats.png is a pre-defined DataFormat<Uint8List>.
-                                  // Calling it with the bytes will produce the EncodedData.
-                                  item.add(Formats.png(bytes));
-
-                                  // Example of adding a text fallback:
-                                  // item.add(super_clipboard.Formats.plainText('Cellular Automaton Image - Rule $actualRuleIndex'));
-
-                                  try {
-                                    await clipboard.write([item]);
                                   } catch (e) {
-                                    if (kDebugMode) {
-                                      print('Error copying to clipboard: $e');
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Failed to copy image: $e'))
+                                      );
                                     }
-                                    if (!mounted) return;
-                                    // ignore: use_build_context_synchronously
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Failed to copy image: $e',
-                                        ),
-                                      ),
-                                    );
-                                    return;
                                   }
-                                  if (!mounted) return;
-                                  // ignore: use_build_context_synchronously
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Image for Rule $actualRuleIndex copied!',
-                                      ),
-                                    ),
-                                  );
                                 },
                               ),
                             ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    if (!gen.isSkipped) Center(child: Image(image: gen.image)),
-                  ],
-                ),
-              );
+                      const SizedBox(height: 4),
+                      Center(child: Image(image: gen.image)),
+                    ],
+                  ),
+                ));
+                ruleIndex += _currentJumpAmount;
+                continue;
+              }
             }
+            break;
+          }
 
-            // If it is still generating:
-            if (_generatingRules.contains(actualRuleIndex)) {
-              return const SizedBox(
-                height: 200,
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-
-            // If we have concurrency space, schedule generating for after the build:
-            if (_generatingRules.length < _concurrencyLimit &&
-                !_generatingRules.contains(actualRuleIndex) &&
-                !_generatedCache.containsKey(actualRuleIndex)) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                // Check again if still mounted and if the rule is still needed,
-                // as the state might have changed by the time this callback runs.
-                if (mounted &&
-                    !_generatingRules.contains(actualRuleIndex) &&
-                    !_generatedCache.containsKey(actualRuleIndex)) {
-                  _startGenerating(actualRuleIndex);
+          // Schedule generation for next items
+          if (_generatingRules.length < _concurrencyLimit) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              int available = _concurrencyLimit - _generatingRules.length;
+              int ri = _currentStartingRule;
+              int started = 0;
+              while (started < available && BigInt.from(ri) < maxRules) {
+                if (!_generatingRules.contains(ri) && !_generatedCache.containsKey(ri)) {
+                  _startGenerating(ri);
+                  started++;
                 }
-              });
-            }
+                ri += _currentJumpAmount;
+              }
+            });
+          }
 
-            // Display spinner while awaiting generation:
-            return const SizedBox(
+          // Add spinner if generation in flight
+          if (_generatingRules.isNotEmpty) {
+            rows.add(const SizedBox(
               height: 200,
               child: Center(child: CircularProgressIndicator()),
-            );
-          },
-        ),
+            ));
+          }
+
+          return ListView(children: rows);
+        },
       ),
     );
   }
